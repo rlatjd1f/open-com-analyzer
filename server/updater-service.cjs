@@ -212,7 +212,7 @@ class UpdaterService {
           const actualSrc = fs.existsSync(srcAppPath) ? srcAppPath : path.join(extractDir, fs.readdirSync(extractDir).find(f => f.endsWith('.app')));
 
           // Remove quarantine and copy to /Applications
-          const replaceCmd = `xattr -cr "${actualSrc}" && rm -rf "${targetAppPath}" && cp -R "${actualSrc}" /Applications/ && touch "${targetAppPath}"`;
+          const replaceCmd = `xattr -cr "${actualSrc}" && rm -rf "${targetAppPath}" && cp -R "${actualSrc}" /Applications/ && xattr -cr "${targetAppPath}" && touch "${targetAppPath}"`;
           exec(replaceCmd, (replaceErr) => {
             if (replaceErr) {
               return reject(new Error(`앱 대치 실패: ${replaceErr.message}`));
@@ -220,13 +220,31 @@ class UpdaterService {
 
             resolve({ success: true, message: '업데이트가 완료되었습니다. 앱을 재실행합니다.' });
 
-            // Relaunch the new app and exit
+            // Create detached relaunch script that waits for current app to exit, then launches the updated app
+            try {
+              const relaunchScript = path.join(tempDir, 'relaunch.sh');
+              const scriptContent = `#!/bin/bash
+sleep 1
+pkill -9 -f "COM Analyzer" 2>/dev/null || true
+sleep 0.5
+xattr -cr "${targetAppPath}" 2>/dev/null || true
+open "${targetAppPath}"
+`;
+              fs.writeFileSync(relaunchScript, scriptContent, { mode: 0o755 });
+
+              const { spawn } = require('child_process');
+              const sub = spawn('/bin/bash', [relaunchScript], {
+                detached: true,
+                stdio: 'ignore'
+              });
+              sub.unref();
+            } catch (spawnErr) {
+              console.warn('Failed to spawn detached relaunch script:', spawnErr);
+            }
+
             setTimeout(() => {
-              exec(`open "${targetAppPath}"`);
-              setTimeout(() => {
-                process.exit(0);
-              }, 600);
-            }, 500);
+              process.exit(0);
+            }, 600);
           });
         });
       });
