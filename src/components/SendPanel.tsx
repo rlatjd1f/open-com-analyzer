@@ -1,6 +1,42 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AppTheme, Packet } from '../types';
-import { Send, Play, Square, Zap } from 'lucide-react';
+import { Send, Play, Square, Zap, Star, Clock, Trash2, Plus, ChevronDown } from 'lucide-react';
+
+interface FavoritePacket {
+  id: string;
+  label?: string;
+  data: string;
+  format: 'hex' | 'ascii';
+  isFavorite: boolean;
+  timestamp: number;
+}
+
+const DEFAULT_PRESETS: FavoritePacket[] = [
+  {
+    id: 'preset-modbus-read',
+    label: 'Modbus RTU 읽기 (01 03)',
+    data: '01 03 00 00 00 0A C5 CD',
+    format: 'hex',
+    isFavorite: true,
+    timestamp: 1
+  },
+  {
+    id: 'preset-modbus-write',
+    label: 'Modbus RTU 쓰기 (01 06)',
+    data: '01 06 00 01 00 01 19 CA',
+    format: 'hex',
+    isFavorite: true,
+    timestamp: 2
+  },
+  {
+    id: 'preset-ping',
+    label: 'Ping 문자열 (ASCII)',
+    data: 'PING',
+    format: 'ascii',
+    isFavorite: true,
+    timestamp: 3
+  }
+];
 
 interface SendPanelProps {
   theme: AppTheme;
@@ -17,7 +53,47 @@ export const SendPanel: React.FC<SendPanelProps> = ({
 }) => {
   const [data, setData] = useState('');
   const [format, setFormat] = useState<'hex' | 'ascii'>('hex');
+
+  // Frequent Packets Dropdown State
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const [packetList, setPacketList] = useState<FavoritePacket[]>(() => {
+    try {
+      const saved = localStorage.getItem('com_analyzer_frequent_packets');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {}
+    return DEFAULT_PRESETS;
+  });
+
+  const favoritesRef = useRef<HTMLDivElement>(null);
   
+  // Save frequent packets to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('com_analyzer_frequent_packets', JSON.stringify(packetList));
+    } catch (e) {}
+  }, [packetList]);
+
+  // Close dropdown on outside click or ESC
+  useEffect(() => {
+    if (!isFavoritesOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (favoritesRef.current && !favoritesRef.current.contains(e.target as Node)) {
+        setIsFavoritesOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsFavoritesOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFavoritesOpen]);
+
   // 1. Interval Repeat Mode
   const [autoRepeat, setAutoRepeat] = useState(false);
   const [intervalMs, setIntervalMs] = useState(1000);
@@ -58,15 +134,91 @@ export const SendPanel: React.FC<SendPanelProps> = ({
     }
   }, [data, format]);
 
+  // Add packet to history
+  const recordSentPacket = (sendData: string, sendFormat: 'hex' | 'ascii') => {
+    const trimmed = sendData.trim();
+    if (!trimmed) return;
+
+    setPacketList((prev) => {
+      // Find existing
+      const existingIdx = prev.findIndex(p => p.data === trimmed && p.format === sendFormat);
+      if (existingIdx >= 0) {
+        // Update timestamp & keep favorite flag
+        const existing = prev[existingIdx];
+        const updated = { ...existing, timestamp: Date.now() };
+        const next = [...prev];
+        next.splice(existingIdx, 1);
+        return [updated, ...next];
+      } else {
+        // Add new recent item
+        const newItem: FavoritePacket = {
+          id: `pkt-${Date.now()}`,
+          data: trimmed,
+          format: sendFormat,
+          isFavorite: false,
+          timestamp: Date.now()
+        };
+        // Keep favorites + up to 20 recents
+        const favorites = prev.filter(p => p.isFavorite);
+        const recents = prev.filter(p => !p.isFavorite).slice(0, 19);
+        return [newItem, ...favorites, ...recents];
+      }
+    });
+  };
+
   const handleSend = () => {
     if (!data.trim()) return;
     onSend(data, format);
+    recordSentPacket(data, format);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleSend();
     }
+  };
+
+  const handleApplyPacket = (pkt: FavoritePacket) => {
+    setData(pkt.data);
+    setFormat(pkt.format);
+    setIsFavoritesOpen(false);
+  };
+
+  const handleSendSpecificPacket = (pkt: FavoritePacket) => {
+    setData(pkt.data);
+    setFormat(pkt.format);
+    onSend(pkt.data, pkt.format);
+    recordSentPacket(pkt.data, pkt.format);
+    setIsFavoritesOpen(false);
+  };
+
+  const handleToggleFavorite = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPacketList((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, isFavorite: !p.isFavorite } : p))
+    );
+  };
+
+  const handleDeletePacket = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPacketList((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleAddCurrentAsFavorite = () => {
+    if (!data.trim()) {
+      alert('저장할 데이터를 먼저 입력해주세요.');
+      return;
+    }
+    const label = prompt('이 패킷의 이름을 입력하세요 (예: 밸브 열기 명령):', '') || undefined;
+    const newItem: FavoritePacket = {
+      id: `fav-${Date.now()}`,
+      label,
+      data: data.trim(),
+      format,
+      isFavorite: true,
+      timestamp: Date.now()
+    };
+    setPacketList((prev) => [newItem, ...prev.filter((p) => p.data !== data.trim())]);
   };
 
   // 1. Auto repeat timer
@@ -77,6 +229,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({
       timerRef.current = setInterval(() => {
         if (dataRef.current.trim()) {
           onSendRef.current(dataRef.current, formatRef.current);
+          recordSentPacket(dataRef.current, formatRef.current);
         }
       }, Math.max(50, intervalMs));
     } else {
@@ -98,7 +251,6 @@ export const SendPanel: React.FC<SendPanelProps> = ({
         return;
       }
       setAutoRepeat(false);
-      // Mark current last RX packet as already processed so historical packets won't trigger immediately
       lastProcessedRxId.current = lastRxPacket ? lastRxPacket.id : null;
       setRxTriggerEnabled(true);
     } else {
@@ -111,10 +263,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({
   useEffect(() => {
     if (!rxTriggerEnabled || !lastRxPacket || !dataRef.current.trim()) return;
 
-    // Check if this specific RX packet ID was already processed
     if (lastRxPacket.id === lastProcessedRxId.current) return;
-
-    // Record this packet ID immediately so re-renders or delay timers cannot duplicate sending
     lastProcessedRxId.current = lastRxPacket.id;
 
     const toSend = dataRef.current;
@@ -124,19 +273,24 @@ export const SendPanel: React.FC<SendPanelProps> = ({
     if (delay > 0) {
       const dTimer = setTimeout(() => {
         onSendRef.current(toSend, fmt);
+        recordSentPacket(toSend, fmt);
       }, delay);
       return () => clearTimeout(dTimer);
     } else {
       onSendRef.current(toSend, fmt);
+      recordSentPacket(toSend, fmt);
     }
   }, [lastRxPacket, rxTriggerEnabled]);
 
   const isRetro = theme.name === 'classic-retro';
   const isDark = theme.name === 'modern-dark';
 
+  const favoritePackets = useMemo(() => packetList.filter(p => p.isFavorite), [packetList]);
+  const recentPackets = useMemo(() => packetList.filter(p => !p.isFavorite), [packetList]);
+
   return (
     <div
-      className={`px-3 py-1.5 flex items-center gap-2 border-t text-xs select-none ${
+      className={`px-3 py-1.5 flex items-center gap-2 border-t text-xs select-none relative ${
         isRetro
           ? 'bg-[#ece9d8] text-black border-[#808080]'
           : isDark
@@ -156,6 +310,218 @@ export const SendPanel: React.FC<SendPanelProps> = ({
         <Send size={12} />
         <span>보내는 데이터</span>
       </button>
+
+      {/* "자주 사용하는 데이터" Dropdown Trigger Button */}
+      <div className="relative shrink-0" ref={favoritesRef}>
+        <button
+          type="button"
+          onClick={() => setIsFavoritesOpen(!isFavoritesOpen)}
+          className={`px-2.5 py-1 rounded font-medium text-xs flex items-center gap-1.5 transition-all shadow-sm ${
+            isFavoritesOpen
+              ? isRetro
+                ? 'bg-[#000080] text-white font-bold'
+                : 'bg-indigo-600 text-white'
+              : isRetro
+              ? 'border-2 border-outset border-[#ffffff] bg-[#d4d0c8] text-black active:border-inset hover:bg-zinc-200'
+              : isDark
+              ? 'bg-zinc-800 hover:bg-zinc-700 text-amber-400 border border-zinc-700'
+              : 'bg-white hover:bg-zinc-100 text-amber-600 border border-zinc-300'
+          }`}
+          title="자주 사용하는 패킷 프리셋 및 최근 전송 기록"
+        >
+          <Star size={13} className={isFavoritesOpen ? 'fill-current' : 'text-amber-500 fill-amber-500'} />
+          <span>자주 쓰는 데이터</span>
+          <ChevronDown size={12} className={`transition-transform duration-200 ${isFavoritesOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {/* Dropdown Popover */}
+        {isFavoritesOpen && (
+          <div
+            className={`absolute bottom-full left-0 mb-2 w-96 rounded-xl shadow-2xl border overflow-hidden flex flex-col z-50 animate-in fade-in slide-in-from-bottom-2 duration-150 ${
+              isRetro
+                ? 'bg-[#ece9d8] text-black border-[#808080] font-sans'
+                : isDark
+                ? 'bg-zinc-900 text-zinc-100 border-zinc-700/80 shadow-indigo-950/50'
+                : 'bg-white text-zinc-800 border-zinc-200 shadow-zinc-300/60'
+            }`}
+          >
+            {/* Popover Header */}
+            <div
+              className={`px-3.5 py-2.5 flex items-center justify-between border-b shrink-0 ${
+                isRetro
+                  ? 'bg-[#0a246a] text-white font-bold'
+                  : isDark
+                  ? 'bg-zinc-800/90 border-zinc-700/80'
+                  : 'bg-zinc-50 border-zinc-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 text-xs font-bold">
+                <Star size={14} className="text-amber-400 fill-amber-400" />
+                <span>자주 사용하는 패킷 & 최근 기록</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddCurrentAsFavorite}
+                className={`text-[11px] px-2 py-0.5 rounded flex items-center gap-1 font-semibold transition-all ${
+                  isRetro
+                    ? 'bg-white text-black hover:bg-zinc-200'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                }`}
+                title="현재 입력창의 데이터를 즐겨찾기에 등록합니다"
+              >
+                <Plus size={11} /> 현재값 즐겨찾기 추가
+              </button>
+            </div>
+
+            {/* List Body */}
+            <div className="max-h-72 overflow-y-auto p-2 flex flex-col gap-2.5 text-xs">
+              {/* 1. Favorites Section */}
+              {favoritePackets.length > 0 && (
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-500 px-1.5 py-0.5 flex items-center gap-1">
+                    <Star size={11} className="fill-amber-500" /> 즐겨찾기 / 프리셋 ({favoritePackets.length})
+                  </div>
+                  <div className="flex flex-col gap-1 mt-1">
+                    {favoritePackets.map((pkt) => (
+                      <div
+                        key={pkt.id}
+                        onClick={() => handleApplyPacket(pkt)}
+                        className={`p-2 rounded-lg border group cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                          isRetro
+                            ? 'bg-white border-[#808080] hover:bg-blue-50'
+                            : isDark
+                            ? 'bg-zinc-800/60 border-zinc-700/70 hover:bg-zinc-800 hover:border-indigo-500/60'
+                            : 'bg-zinc-50 border-zinc-200 hover:bg-indigo-50/50 hover:border-indigo-200'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          {pkt.label && (
+                            <div className="font-semibold text-xs text-indigo-400 truncate mb-0.5">
+                              {pkt.label}
+                            </div>
+                          )}
+                          <div className="font-mono text-xs truncate opacity-90">
+                            {pkt.data}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
+                            pkt.format === 'hex'
+                              ? 'bg-indigo-500/20 text-indigo-400'
+                              : 'bg-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {pkt.format}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleFavorite(pkt.id, e)}
+                            className="p-1 rounded text-amber-400 hover:scale-110 transition-transform"
+                            title="즐겨찾기 해제"
+                          >
+                            <Star size={13} className="fill-amber-400" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSendSpecificPacket(pkt);
+                            }}
+                            className="p-1 rounded hover:bg-indigo-600 hover:text-white transition-colors text-zinc-400"
+                            title="즉시 전송"
+                          >
+                            <Send size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Recent Packets Section */}
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider opacity-60 px-1.5 py-0.5 flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    <Clock size={11} /> 최근 전송 내역 ({recentPackets.length})
+                  </span>
+                  {recentPackets.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setPacketList(prev => prev.filter(p => p.isFavorite))}
+                      className="text-[10px] text-red-400 hover:underline"
+                    >
+                      최근기록 비우기
+                    </button>
+                  )}
+                </div>
+
+                {recentPackets.length === 0 ? (
+                  <div className="p-4 text-center text-xs opacity-50 font-sans">
+                    최근 전송한 데이터가 없습니다.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1 mt-1">
+                    {recentPackets.map((pkt) => (
+                      <div
+                        key={pkt.id}
+                        onClick={() => handleApplyPacket(pkt)}
+                        className={`p-2 rounded-lg border group cursor-pointer flex items-center justify-between gap-2 transition-all ${
+                          isRetro
+                            ? 'bg-white border-[#808080] hover:bg-blue-50'
+                            : isDark
+                            ? 'bg-zinc-800/40 border-zinc-800 hover:bg-zinc-800 hover:border-zinc-700'
+                            : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
+                        }`}
+                      >
+                        <div className="flex-1 min-w-0 font-mono text-xs truncate">
+                          {pkt.data}
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
+                            pkt.format === 'hex'
+                              ? 'bg-indigo-500/20 text-indigo-400'
+                              : 'bg-emerald-500/20 text-emerald-400'
+                          }`}>
+                            {pkt.format}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleFavorite(pkt.id, e)}
+                            className="p-1 rounded text-zinc-500 hover:text-amber-400 transition-colors"
+                            title="즐겨찾기에 등록"
+                          >
+                            <Star size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeletePacket(pkt.id, e)}
+                            className="p-1 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                            title="삭제"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer helper */}
+            <div
+              className={`px-3 py-1.5 text-[10px] opacity-60 border-t flex items-center justify-between ${
+                isRetro ? 'bg-[#d4d0c8] border-[#808080]' : isDark ? 'bg-zinc-950 border-zinc-800' : 'bg-zinc-100 border-zinc-200'
+              }`}
+            >
+              <span>클릭 시 입력창에 적용됩니다</span>
+              <span>ESC 키로 닫기</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Main Send Input Box */}
       <div className="flex-1 relative flex items-center min-w-0">
