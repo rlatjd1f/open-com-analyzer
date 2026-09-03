@@ -42,7 +42,10 @@ jobs:
       - name: Package macOS Application (Apple Silicon & Intel)
         if: matrix.os == 'macos-latest'
         run: |
-          npx electron-packager . "COM Analyzer" --platform=darwin --arch=arm64,x64 --icon=assets/icon.icns --app-bundle-id="com.analyzer.comanalyzer" --app-version="${{ github.ref_name }}" --build-version="1.0.0" --out=dist-app --overwrite
+          RAW_VER="${{ github.ref_name }}"
+          VERSION="${RAW_VER#v}"
+          VERSION="${VERSION:-1.0.0}"
+          npx electron-packager . "COM Analyzer" --platform=darwin --arch=arm64,x64 --icon=assets/icon.icns --app-bundle-id="com.analyzer.comanalyzer" --app-version="$VERSION" --build-version="$VERSION" --out=dist-app --overwrite
           cd dist-app
           ditto -c -k --sequesterRsrc --keepParent "COM Analyzer-darwin-arm64/COM Analyzer.app" "COM-Analyzer-macOS-arm64.zip"
           ditto -c -k --sequesterRsrc --keepParent "COM Analyzer-darwin-x64/COM Analyzer.app" "COM-Analyzer-macOS-x64.zip"
@@ -52,7 +55,10 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: bash
         run: |
-          npx electron-packager . "COM Analyzer" --platform=win32 --arch=x64 --app-version="${{ github.ref_name }}" --build-version="1.0.0" --out=dist-app --overwrite
+          RAW_VER="${{ github.ref_name }}"
+          VERSION="${RAW_VER#v}"
+          VERSION="${VERSION:-1.0.0}"
+          npx electron-packager . "COM Analyzer" --platform=win32 --arch=x64 --app-version="$VERSION" --build-version="$VERSION" --out=dist-app --overwrite
           cd dist-app
           7z a -tzip "COM-Analyzer-Windows-x64.zip" "COM Analyzer-win32-x64"
 
