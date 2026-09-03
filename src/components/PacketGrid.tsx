@@ -34,6 +34,37 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
     return `${hh}:${mm}:${ss}.${sss}`;
   };
 
+  if (pkt.direction === 'system') {
+    return (
+      <div
+        style={{ contain: 'layout style paint' }}
+        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-sm will-change-transform font-mono text-xs select-none ${
+          isRetro
+            ? 'bg-[#1b2640] border border-[#6b7fa9]/50 text-[#ffea79] shadow-xs'
+            : isDark
+            ? 'bg-zinc-800/80 border border-zinc-700/60 text-amber-300 shadow-xs'
+            : 'bg-amber-50/90 border border-amber-200/90 text-amber-900 shadow-xs'
+        }`}
+      >
+        <span
+          className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
+            isRetro
+              ? 'bg-black/40 text-white border border-white/20'
+              : isDark
+              ? 'bg-zinc-900 text-zinc-300 border border-zinc-700'
+              : 'bg-white text-zinc-700 border border-amber-300'
+          }`}
+        >
+          {formatTimestamp(pkt.timestamp)}
+        </span>
+        <span className="px-1.5 py-0.5 rounded text-[10px] font-extrabold uppercase bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+          SYSTEM
+        </span>
+        <span className="font-semibold text-[12px]">{pkt.ascii || '통신 연결이 종료되었습니다.'}</span>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{ contain: 'layout style paint' }}
@@ -102,7 +133,7 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
                 onHoverByte(e, {
                   byte: b,
                   idx: byteIdx + 1,
-                  direction: pkt.direction,
+                  direction: pkt.direction as 'rx' | 'tx',
                   timestamp: pkt.timestamp
                 })
               }

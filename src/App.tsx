@@ -105,6 +105,32 @@ export const App: React.FC = () => {
   const rxBlinkTimer = useRef<any>(null);
   const txBlinkTimer = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const prevStatusRef = useRef<ConnectionStatus | null>(null);
+
+  const addSystemLog = useCallback((message: string) => {
+    const sysPacket: Packet = {
+      id: `sys-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      direction: 'system',
+      bytes: [],
+      hex: '',
+      ascii: message,
+      length: 0,
+      timestamp: Date.now(),
+      source: 'system'
+    };
+    setPackets((prev) => {
+      const updated = [...prev, sysPacket];
+      if (maxBufferPackets > 0 && updated.length > maxBufferPackets) {
+        return updated.slice(updated.length - maxBufferPackets);
+      }
+      return updated;
+    });
+  }, [maxBufferPackets]);
+
+  const addSystemLogRef = useRef(addSystemLog);
+  useEffect(() => {
+    addSystemLogRef.current = addSystemLog;
+  }, [addSystemLog]);
 
   // --- WebSocket Connection ---
   const connectWebSocket = useCallback(() => {
@@ -121,9 +147,26 @@ export const App: React.FC = () => {
         try {
           const msg = JSON.parse(event.data);
           switch (msg.type) {
-            case 'STATUS_UPDATE':
-              setStatus(msg.status);
+            case 'STATUS_UPDATE': {
+              const newStatus: ConnectionStatus = msg.status;
+              const prev = prevStatusRef.current;
+              if (prev && prev.connected && !newStatus.connected) {
+                if (prev.type === 'tcp-server') {
+                  addSystemLogRef.current(`TCP 서버 연결이 종료되었습니다. (PORT: ${prev.port || 121})`);
+                } else if (prev.type === 'tcp-client') {
+                  addSystemLogRef.current('TCP 클라이언트 연결이 종료되었습니다.');
+                } else if (prev.type === 'serial') {
+                  addSystemLogRef.current('시리얼 포트 연결이 종료되었습니다.');
+                } else if (prev.type === 'virtual') {
+                  addSystemLogRef.current('가상 시뮬레이터가 종료되었습니다.');
+                } else {
+                  addSystemLogRef.current('통신 연결이 정상적으로 종료되었습니다.');
+                }
+              }
+              prevStatusRef.current = newStatus;
+              setStatus(newStatus);
               break;
+            }
 
             case 'PORT_LIST':
               setPorts(msg.ports || []);
@@ -327,6 +370,20 @@ export const App: React.FC = () => {
   };
 
   const handleDisconnect = () => {
+    if (status.connected) {
+      if (status.type === 'tcp-server') {
+        addSystemLog(`TCP 서버 연결이 종료되었습니다. (PORT: ${status.port || 121})`);
+      } else if (status.type === 'tcp-client') {
+        addSystemLog('TCP 클라이언트 연결이 종료되었습니다.');
+      } else if (status.type === 'serial') {
+        addSystemLog('시리얼 포트 연결이 종료되었습니다.');
+      } else if (status.type === 'virtual') {
+        addSystemLog('가상 시뮬레이터가 종료되었습니다.');
+      } else {
+        addSystemLog('통신 연결이 정상적으로 종료되었습니다.');
+      }
+    }
+    prevStatusRef.current = { connected: false, type: null, info: '연결되지 않음' };
     setStatus({ connected: false, type: null, info: '연결되지 않음' });
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'DISCONNECT' }));
@@ -354,8 +411,12 @@ export const App: React.FC = () => {
     content += `========================================================\n\n`;
     packets.forEach((p, idx) => {
       const time = new Date(p.timestamp).toISOString().split('T')[1].slice(0, 12);
-      content += `[#${idx + 1}] [${time}] [${p.direction.toUpperCase()}] (${p.length}B) HEX: ${p.hex}\n`;
-      content += `    ASCII: ${p.ascii}\n\n`;
+      if (p.direction === 'system') {
+        content += `[#${idx + 1}] [${time}] [SYSTEM] ${p.ascii}\n\n`;
+      } else {
+        content += `[#${idx + 1}] [${time}] [${p.direction.toUpperCase()}] (${p.length}B) HEX: ${p.hex}\n`;
+        content += `    ASCII: ${p.ascii}\n\n`;
+      }
     });
 
     const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });

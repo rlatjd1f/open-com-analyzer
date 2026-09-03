@@ -1,4 +1,4 @@
-export type DataDirection = 'rx' | 'tx';
+export type DataDirection = 'rx' | 'tx' | 'system';
 
 export const APP_VERSION = '0.0.6';
 
