@@ -10,6 +10,8 @@ interface TitleBarProps {
   onNewWindow: () => void;
   rxCount: number;
   txCount: number;
+  rxBlinking?: boolean;
+  txBlinking?: boolean;
   appVersion?: string;
 }
 
@@ -21,6 +23,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onNewWindow,
   rxCount,
   txCount,
+  rxBlinking = false,
+  txBlinking = false,
   appVersion = 'v0.0.2'
 }) => {
   // Title text matching the classic app format
@@ -84,10 +88,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </span>
         </div>
         <div className="h-3 w-[1px] bg-zinc-400/30" />
-        <span className="font-mono text-[11px] text-amber-500">
+        <span className={`font-mono text-[11px] px-1 rounded transition-all ${
+          rxBlinking ? 'bg-amber-500 text-white font-bold shadow-xs' : 'text-amber-500'
+        }`}>
           RX: <b>{rxCount.toLocaleString()}</b> B
         </span>
-        <span className="font-mono text-[11px] text-cyan-500">
+        <span className={`font-mono text-[11px] px-1 rounded transition-all ${
+          txBlinking ? 'bg-cyan-500 text-white font-bold shadow-xs' : 'text-cyan-500'
+        }`}>
           TX: <b>{txCount.toLocaleString()}</b> B
         </span>
       </div>

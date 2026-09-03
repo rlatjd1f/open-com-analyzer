@@ -1,6 +1,6 @@
-import React, { useRef } from 'react';
+import React, { useState } from 'react';
 import type { AppTheme, ConnectionStatus } from '../types';
-import { Printer, Save, FolderOpen, ArrowDown, Trash2 } from 'lucide-react';
+import { Printer, ArrowDown, Trash2, Server, Power } from 'lucide-react';
 
 interface ControlSidebarProps {
   totalBytesCount: number;
@@ -10,8 +10,6 @@ interface ControlSidebarProps {
   onClear: () => void;
   autoScroll: boolean;
   onToggleAutoScroll: () => void;
-  onScrollToTop?: () => void;
-  onScrollToBottom?: () => void;
   dlgState: 'top' | 'middle' | 'bottom';
   onDlgStateChange: (state: 'top' | 'middle' | 'bottom') => void;
   rxMode: 'ascii' | 'binary';
@@ -19,13 +17,11 @@ interface ControlSidebarProps {
   txMode: 'ascii' | 'binary';
   onTxModeChange: (mode: 'ascii' | 'binary') => void;
   theme: AppTheme;
-  onThemeColorChange: (key: 'rxColor' | 'txColor' | 'textColor', color: string) => void;
   onPrint: () => void;
-  onSave: () => void;
-  onOpen: () => void;
   status: ConnectionStatus;
-  rxBlinking: boolean;
-  txBlinking: boolean;
+  onStartTcpServer: (port: number) => void;
+  onConnectTcpClient: (host: string, port: number) => void;
+  onDisconnect: () => void;
 }
 
 export const ControlSidebar: React.FC<ControlSidebarProps> = ({
@@ -43,20 +39,33 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
   txMode,
   onTxModeChange,
   theme,
-  onThemeColorChange,
   onPrint,
-  onSave,
-  onOpen,
   status,
-  rxBlinking,
-  txBlinking
+  onStartTcpServer,
+  onConnectTcpClient,
+  onDisconnect
 }) => {
-  const rxColorInputRef = useRef<HTMLInputElement>(null);
-  const txColorInputRef = useRef<HTMLInputElement>(null);
-  const textColorInputRef = useRef<HTMLInputElement>(null);
+  // Quick TCP settings local state
+  const [quickTcpMode, setQuickTcpMode] = useState<'server' | 'client'>('server');
+  const [quickTcpPort, setQuickTcpPort] = useState(121);
+  const [quickTcpHost, setQuickTcpHost] = useState('127.0.0.1');
 
   const isRetro = theme.name === 'classic-retro';
   const isDark = theme.name === 'modern-dark';
+
+  const isTcpConnected = status.connected && (status.type === 'tcp-server' || status.type === 'tcp-client');
+
+  const handleQuickTcpAction = () => {
+    if (status.connected) {
+      onDisconnect();
+    } else {
+      if (quickTcpMode === 'server') {
+        onStartTcpServer(quickTcpPort);
+      } else {
+        onConnectTcpClient(quickTcpHost, quickTcpPort);
+      }
+    }
+  };
 
   return (
     <div
@@ -85,7 +94,7 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
           </span>
         </div>
 
-        {/* Buffer Limit Quick Selector (Full Width, No Overflow) */}
+        {/* Buffer Limit Quick Selector (Full Width) */}
         <div className="flex flex-col gap-1 pt-1.5 border-t border-black/10 dark:border-white/10">
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-zinc-500 font-semibold">버퍼 한도</span>
@@ -126,22 +135,127 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
           <span>{autoScroll ? '자동스크롤 ON' : '자동스크롤 OFF'}</span>
         </button>
 
-        {/* Clear Buffer Button */}
+        {/* Clear Buffer Screen Button */}
         <button
           onClick={onClear}
-          className={`w-full py-1 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition-all ${
+          className={`w-full py-1 rounded text-[11px] font-medium flex items-center justify-center gap-1 transition-all ${
             isRetro
-              ? 'border border-[#808080] bg-[#e0ded8] active:bg-[#c0beb8]'
-              : 'bg-rose-500/10 text-rose-500 hover:bg-rose-500/20'
+              ? 'border border-[#808080] bg-[#d4d0c8] active:bg-[#b0aca4] text-red-700'
+              : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20'
           }`}
-          title="현재 화면의 패킷 버퍼 비우기"
+          title="화면 버퍼 초기화 (Cmd+K)"
         >
           <Trash2 size={11} />
           <span>화면 지우기</span>
         </button>
       </div>
 
-      {/* 2. Dlg 상태 Group Box */}
+      {/* 2. TCP 빠른 설정 Group Box (Quick TCP Control) */}
+      <fieldset className={`border rounded p-1.5 ${isRetro ? 'border-[#808080]' : 'border-zinc-400/40'}`}>
+        <legend className="px-1 text-[11px] font-semibold opacity-90 flex items-center gap-1">
+          <Server size={11} className="text-indigo-400" />
+          <span>TCP 간편 설정</span>
+        </legend>
+        <div className="flex flex-col gap-1.5 mt-0.5 text-[11px]">
+          {/* Mode Switcher */}
+          <div className="flex rounded border overflow-hidden p-0.5 bg-black/5 dark:bg-white/5">
+            <button
+              type="button"
+              onClick={() => setQuickTcpMode('server')}
+              className={`flex-1 py-0.5 text-[10px] font-bold rounded transition-all ${
+                quickTcpMode === 'server'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+              }`}
+            >
+              서버 (Port 121)
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickTcpMode('client')}
+              className={`flex-1 py-0.5 text-[10px] font-bold rounded transition-all ${
+                quickTcpMode === 'client'
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
+              }`}
+            >
+              클라이언트
+            </button>
+          </div>
+
+          {/* Port input */}
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-zinc-500 font-mono">PORT</span>
+            <input
+              type="number"
+              value={quickTcpPort}
+              onChange={(e) => setQuickTcpPort(Number(e.target.value))}
+              className={`w-16 h-6 px-1.5 text-right font-mono text-[11px] font-bold rounded border outline-none ${
+                isRetro
+                  ? 'bg-white text-black border-[#808080]'
+                  : isDark
+                  ? 'bg-zinc-900 text-zinc-100 border-zinc-700'
+                  : 'bg-white text-zinc-800 border-zinc-300'
+              }`}
+            />
+          </div>
+
+          {/* IP Host input if client */}
+          {quickTcpMode === 'client' && (
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[10px] text-zinc-500 font-mono">IP</span>
+              <input
+                type="text"
+                value={quickTcpHost}
+                onChange={(e) => setQuickTcpHost(e.target.value)}
+                placeholder="127.0.0.1"
+                className={`w-20 h-6 px-1 text-right font-mono text-[10px] rounded border outline-none ${
+                  isRetro
+                    ? 'bg-white text-black border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-900 text-zinc-100 border-zinc-700'
+                    : 'bg-white text-zinc-800 border-zinc-300'
+                }`}
+              />
+            </div>
+          )}
+
+          {/* Status and Action Button */}
+          {isTcpConnected ? (
+            <div className="flex flex-col gap-1 mt-0.5">
+              <div className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] flex items-center justify-between font-mono">
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {status.type === 'tcp-server' ? `PORT ${status.port || 121}` : '접속됨'}
+                </span>
+                <span>{status.type === 'tcp-server' ? `${status.clientCount ?? 0}명` : ''}</span>
+              </div>
+              <button
+                type="button"
+                onClick={onDisconnect}
+                className="w-full py-1 rounded font-bold text-[10px] bg-red-600 hover:bg-red-500 text-white transition-all shadow-xs"
+              >
+                연결 종료
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleQuickTcpAction}
+              className={`w-full py-1 rounded font-bold text-[10px] flex items-center justify-center gap-1 transition-all shadow-sm ${
+                isRetro
+                  ? 'border-2 border-outset border-white bg-[#000080] text-white active:bg-blue-900'
+                  : 'bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white'
+              }`}
+            >
+              <Power size={11} />
+              <span>{quickTcpMode === 'server' ? '서버 구동' : '원격 접속'}</span>
+            </button>
+          )}
+        </div>
+      </fieldset>
+
+      {/* 3. Dlg 상태 Group Box */}
       <fieldset className={`border rounded p-1.5 ${isRetro ? 'border-[#808080]' : 'border-zinc-400/40'}`}>
         <legend className="px-1 text-[11px] font-semibold opacity-90">Dlg 상태</legend>
         <div className="flex flex-col gap-1 mt-0.5 text-[11px]">
@@ -178,7 +292,7 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
         </div>
       </fieldset>
 
-      {/* 3. RX 데이터 Group Box */}
+      {/* 4. RX 데이터 Group Box */}
       <fieldset className={`border rounded p-1.5 ${isRetro ? 'border-[#808080]' : 'border-zinc-400/40'}`}>
         <legend className="px-1 text-[11px] font-semibold opacity-90">RX 데이터</legend>
         <div className="flex flex-col gap-1 mt-0.5 text-[11px]">
@@ -205,7 +319,7 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
         </div>
       </fieldset>
 
-      {/* 4. TX 데이터 Group Box */}
+      {/* 5. TX 데이터 Group Box */}
       <fieldset className={`border rounded p-1.5 ${isRetro ? 'border-[#808080]' : 'border-zinc-400/40'}`}>
         <legend className="px-1 text-[11px] font-semibold opacity-90">TX 데이터</legend>
         <div className="flex flex-col gap-1 mt-0.5 text-[11px]">
@@ -232,145 +346,20 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
         </div>
       </fieldset>
 
-      {/* 5. 색상 설정 (RX, TX, Text) */}
-      <fieldset className={`border rounded p-1.5 ${isRetro ? 'border-[#808080]' : 'border-zinc-400/40'}`}>
-        <legend className="px-1 text-[11px] font-semibold opacity-90">색상 설정</legend>
-        <div className="flex flex-col gap-1 mt-0.5">
-          {/* RX Color */}
-          <button
-            onClick={() => rxColorInputRef.current?.click()}
-            className="w-full flex items-center justify-between px-1.5 py-1 rounded bg-black/5 dark:bg-white/5 hover:bg-black/10 text-[11px]"
-          >
-            <span>RX 색상</span>
-            <div
-              className="w-4 h-4 rounded border border-black/30 shadow-inner"
-              style={{ backgroundColor: theme.rxColor }}
-            />
-          </button>
-          <input
-            ref={rxColorInputRef}
-            type="color"
-            value={theme.rxColor}
-            onChange={(e) => onThemeColorChange('rxColor', e.target.value)}
-            className="hidden"
-          />
-
-          {/* TX Color */}
-          <button
-            onClick={() => txColorInputRef.current?.click()}
-            className="w-full flex items-center justify-between px-1.5 py-1 rounded bg-black/5 dark:bg-white/5 hover:bg-black/10 text-[11px]"
-          >
-            <span>TX 색상</span>
-            <div
-              className="w-4 h-4 rounded border border-black/30 shadow-inner"
-              style={{ backgroundColor: theme.txColor }}
-            />
-          </button>
-          <input
-            ref={txColorInputRef}
-            type="color"
-            value={theme.txColor}
-            onChange={(e) => onThemeColorChange('txColor', e.target.value)}
-            className="hidden"
-          />
-
-          {/* Text Color */}
-          <button
-            onClick={() => textColorInputRef.current?.click()}
-            className="w-full flex items-center justify-between px-1.5 py-1 rounded bg-black/5 dark:bg-white/5 hover:bg-black/10 text-[11px]"
-          >
-            <span>글꼴 색상</span>
-            <div
-              className="w-4 h-4 rounded border border-black/30 shadow-inner"
-              style={{ backgroundColor: theme.textColor }}
-            />
-          </button>
-          <input
-            ref={textColorInputRef}
-            type="color"
-            value={theme.textColor}
-            onChange={(e) => onThemeColorChange('textColor', e.target.value)}
-            className="hidden"
-          />
-        </div>
-      </fieldset>
-
-      {/* 6. Utility Action Buttons */}
-      <div className="flex flex-col gap-1 mt-auto">
+      {/* 6. Action Utility Buttons */}
+      <div className="flex flex-col gap-1 pt-1 mt-auto">
         <button
           onClick={onPrint}
-          className={`w-full py-1.5 rounded flex items-center justify-center gap-1.5 text-[11px] font-medium transition-all ${
+          className={`w-full py-1.5 rounded flex items-center justify-center gap-1 font-medium text-[11px] transition-all ${
             isRetro
-              ? 'border-2 border-outset border-[#ffffff] bg-[#d4d0c8] text-black active:border-inset'
-              : 'bg-zinc-500/10 hover:bg-zinc-500/20'
+              ? 'border border-[#808080] bg-[#d4d0c8] active:bg-[#b0aca4]'
+              : 'hover:bg-zinc-700/40 border border-zinc-700/60 text-zinc-300'
           }`}
+          title="화면 인쇄 (Print)"
         >
           <Printer size={12} />
           <span>화면 인쇄</span>
         </button>
-
-        <button
-          onClick={onSave}
-          className={`w-full py-1.5 rounded flex items-center justify-center gap-1.5 text-[11px] font-medium transition-all ${
-            isRetro
-              ? 'border-2 border-outset border-[#ffffff] bg-[#d4d0c8] text-black active:border-inset'
-              : 'bg-zinc-500/10 hover:bg-zinc-500/20'
-          }`}
-        >
-          <Save size={12} />
-          <span>로그 저장</span>
-        </button>
-
-        <button
-          onClick={onOpen}
-          className={`w-full py-1.5 rounded flex items-center justify-center gap-1.5 text-[11px] font-medium transition-all ${
-            isRetro
-              ? 'border-2 border-outset border-[#ffffff] bg-[#d4d0c8] text-black active:border-inset'
-              : 'bg-zinc-500/10 hover:bg-zinc-500/20'
-          }`}
-        >
-          <FolderOpen size={12} />
-          <span>로그 열기</span>
-        </button>
-      </div>
-
-      {/* 7. Live LED Blinker Indicators */}
-      <div className="pt-2 border-t flex items-center justify-around">
-        {/* Status LED */}
-        <div className="flex flex-col items-center gap-0.5">
-          <span
-            className={`w-3.5 h-3.5 rounded-full border shadow-sm transition-colors ${
-              status.connected
-                ? 'bg-emerald-500 border-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.7)]'
-                : 'bg-zinc-400 border-zinc-500 opacity-60'
-            }`}
-          />
-          <span className="text-[10px] font-bold text-zinc-500">STAT</span>
-        </div>
-
-        {/* RX Blinker */}
-        <div className="flex flex-col items-center gap-0.5">
-          <span
-            className={`w-3.5 h-3.5 rounded-full border shadow-sm transition-all duration-75 ${
-              rxBlinking
-                ? 'bg-amber-400 border-amber-500 shadow-[0_0_10px_rgba(251,191,36,0.9)] scale-110'
-                : 'bg-zinc-400 border-zinc-500 opacity-40'
-            }`}
-          />
-          <span className="text-[10px] font-bold text-zinc-500">RX</span>
-        </div>
-
-        {/* TX Blinker */}
-        <div className="flex flex-col items-center gap-0.5">
-          <span
-            className={`w-3.5 h-3.5 rounded-full border shadow-sm transition-all duration-75 ${
-              txBlinking
-                ? 'bg-cyan-400 border-cyan-500 shadow-[0_0_10px_rgba(34,211,238,0.9)] scale-110'
-                : 'bg-zinc-400 border-zinc-500 opacity-40'
-            }`}
-          />
-          <span className="text-[10px] font-bold text-zinc-500">TX</span>
-        </div>
       </div>
     </div>
   );

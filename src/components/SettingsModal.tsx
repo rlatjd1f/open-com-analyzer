@@ -7,6 +7,7 @@ interface SettingsModalProps {
   onClose: () => void;
   theme: AppTheme;
   onThemeChange?: (themeName: AppTheme['name']) => void;
+  onThemeColorChange?: (key: 'rxColor' | 'txColor' | 'textColor', color: string) => void;
   ports: SerialPortInfo[];
   onRefreshPorts: () => void;
   status: ConnectionStatus;
@@ -25,6 +26,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   theme,
   onThemeChange,
+  onThemeColorChange,
   ports,
   onRefreshPorts,
   status,
@@ -542,18 +544,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                <div className="mt-2 p-3 rounded-lg border bg-zinc-500/5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded" style={{ backgroundColor: theme.rxColor }} />
-                      <span className="font-mono text-[11px]">RX Color</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded" style={{ backgroundColor: theme.txColor }} />
-                      <span className="font-mono text-[11px]">TX Color</span>
-                    </div>
+                {/* Color Customization Section */}
+                <div className="mt-2 flex flex-col gap-2">
+                  <label className="block font-semibold text-xs">패킷 및 텍스트 색상 커스텀</label>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {/* RX Color */}
+                    <label className="p-2.5 rounded-lg border flex items-center justify-between cursor-pointer hover:bg-zinc-500/10 transition-colors">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-xs">RX 수신 색상</span>
+                        <span className="font-mono text-[10px] opacity-70">{theme.rxColor}</span>
+                      </div>
+                      <input
+                        type="color"
+                        value={theme.rxColor}
+                        onChange={(e) => onThemeColorChange && onThemeColorChange('rxColor', e.target.value)}
+                        className="w-7 h-7 rounded border border-black/30 cursor-pointer bg-transparent"
+                      />
+                    </label>
+
+                    {/* TX Color */}
+                    <label className="p-2.5 rounded-lg border flex items-center justify-between cursor-pointer hover:bg-zinc-500/10 transition-colors">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-xs">TX 송신 색상</span>
+                        <span className="font-mono text-[10px] opacity-70">{theme.txColor}</span>
+                      </div>
+                      <input
+                        type="color"
+                        value={theme.txColor}
+                        onChange={(e) => onThemeColorChange && onThemeColorChange('txColor', e.target.value)}
+                        className="w-7 h-7 rounded border border-black/30 cursor-pointer bg-transparent"
+                      />
+                    </label>
+
+                    {/* Text / Font Color */}
+                    <label className="p-2.5 rounded-lg border flex items-center justify-between cursor-pointer hover:bg-zinc-500/10 transition-colors">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-xs">기본 글꼴 색상</span>
+                        <span className="font-mono text-[10px] opacity-70">{theme.textColor}</span>
+                      </div>
+                      <input
+                        type="color"
+                        value={theme.textColor}
+                        onChange={(e) => onThemeColorChange && onThemeColorChange('textColor', e.target.value)}
+                        className="w-7 h-7 rounded border border-black/30 cursor-pointer bg-transparent"
+                      />
+                    </label>
                   </div>
-                  <span className="text-[11px] opacity-60">우측 제어 패널에서 색상 커스텀 가능</span>
                 </div>
               </div>
             )}

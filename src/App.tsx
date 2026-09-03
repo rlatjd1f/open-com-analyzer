@@ -495,6 +495,8 @@ export const App: React.FC = () => {
         onNewWindow={() => window.open(window.location.href, '_blank', 'width=1200,height=800')}
         rxCount={rxCount}
         txCount={txCount}
+        rxBlinking={rxBlinking}
+        txBlinking={txBlinking}
         appVersion={`v${APP_VERSION}`}
       />
 
@@ -543,13 +545,11 @@ export const App: React.FC = () => {
           txMode={txMode}
           onTxModeChange={setTxMode}
           theme={theme}
-          onThemeColorChange={handleThemeColorChange}
           onPrint={handlePrint}
-          onSave={handleSaveLog}
-          onOpen={handleOpenLog}
           status={status}
-          rxBlinking={rxBlinking}
-          txBlinking={txBlinking}
+          onStartTcpServer={handleStartTcpServer}
+          onConnectTcpClient={handleConnectTcpClient}
+          onDisconnect={handleDisconnect}
         />
       </div>
 
@@ -581,6 +581,7 @@ export const App: React.FC = () => {
             textColor: name === 'classic-retro' ? '#000000' : '#000000'
           }))
         }
+        onThemeColorChange={handleThemeColorChange}
         ports={ports}
         onRefreshPorts={handleRefreshPorts}
         status={status}
