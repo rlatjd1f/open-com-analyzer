@@ -3,9 +3,11 @@ const { WebSocketServer } = require('ws');
 const SerialService = require('./serial-service.cjs');
 const TcpService = require('./tcp-service.cjs');
 const VirtualDevice = require('./virtual-device.cjs');
+const UpdaterService = require('./updater-service.cjs');
 const { calculateSumCheck8, calculateSumCheck16, calculateCrc16Modbus, calculateCrc16Ccitt } = require('./crc.cjs');
 
 const PORT = 4001;
+const updaterService = new UpdaterService();
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ name: 'COM Analyzer Backend Server', status: 'running' }));
@@ -204,6 +206,37 @@ wss.on('connection', async (ws) => {
             };
           }
           ws.send(JSON.stringify({ type: 'CALC_RESULT', calcType, result }));
+          break;
+        }
+
+        case 'CHECK_FOR_UPDATES': {
+          try {
+            const updateInfo = await updaterService.checkForUpdates();
+            ws.send(JSON.stringify({ type: 'UPDATE_CHECK_RESULT', ...updateInfo }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'UPDATE_CHECK_ERROR', message: err.message }));
+          }
+          break;
+        }
+
+        case 'START_UPDATE': {
+          try {
+            const { assetUrl } = msg;
+            ws.send(JSON.stringify({ type: 'UPDATE_STATUS', status: 'downloading', message: '업데이트 다운로드 중...' }));
+
+            await updaterService.installUpdate(assetUrl, (progress) => {
+              ws.send(JSON.stringify({
+                type: 'UPDATE_PROGRESS',
+                percent: progress.percent,
+                downloaded: progress.downloaded,
+                total: progress.total
+              }));
+            });
+
+            ws.send(JSON.stringify({ type: 'UPDATE_STATUS', status: 'completed', message: '업데이트 완료! 앱을 재실행합니다.' }));
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'UPDATE_ERROR', message: `업데이트 실패: ${err.message}` }));
+          }
           break;
         }
       }

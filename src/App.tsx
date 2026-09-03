@@ -7,6 +7,7 @@ import { SendPanel } from './components/SendPanel';
 import { UtilityPanel } from './components/UtilityPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { HelpModal } from './components/HelpModal';
+import { UpdateModal, type UpdateInfo } from './components/UpdateModal';
 import type {
   Packet,
   ConnectionStatus,
@@ -49,6 +50,13 @@ export const App: React.FC = () => {
   const [settingsTab, setSettingsTab] = useState<'serial' | 'tcp' | 'virtual' | 'buffer'>('serial');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [insertedData, setInsertedData] = useState('');
+
+  // Auto-Update States
+  const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'downloading' | 'completed' | 'error'>('idle');
+  const [downloadProgress, setDownloadProgress] = useState({ percent: 0, downloaded: 0, total: 0 });
+  const [updateStatusMessage, setUpdateStatusMessage] = useState('');
 
   // Theme
   const [theme, setTheme] = useState<AppTheme>({
@@ -129,6 +137,42 @@ export const App: React.FC = () => {
                 }
                 return next;
               });
+              break;
+            }
+
+            case 'UPDATE_CHECK_RESULT': {
+              setUpdateInfo(msg);
+              setUpdateStatus('idle');
+              if (msg.hasUpdate) {
+                setIsUpdateModalOpen(true);
+              }
+              break;
+            }
+
+            case 'UPDATE_CHECK_ERROR': {
+              setUpdateStatus('error');
+              setUpdateStatusMessage(msg.message || '업데이트 확인 실패');
+              break;
+            }
+
+            case 'UPDATE_STATUS': {
+              setUpdateStatus(msg.status);
+              setUpdateStatusMessage(msg.message || '');
+              break;
+            }
+
+            case 'UPDATE_PROGRESS': {
+              setDownloadProgress({
+                percent: msg.percent || 0,
+                downloaded: msg.downloaded || 0,
+                total: msg.total || 0
+              });
+              break;
+            }
+
+            case 'UPDATE_ERROR': {
+              setUpdateStatus('error');
+              setUpdateStatusMessage(msg.message || '업데이트 진행 중 오류 발생');
               break;
             }
 
@@ -349,6 +393,30 @@ export const App: React.FC = () => {
     window.print();
   };
 
+  const handleCheckForUpdates = useCallback((manual = false) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      setUpdateStatus('checking');
+      if (manual) setIsUpdateModalOpen(true);
+      wsRef.current.send(JSON.stringify({ action: 'CHECK_FOR_UPDATES' }));
+    }
+  }, []);
+
+  const handleStartUpdate = () => {
+    if (wsRef.current?.readyState === WebSocket.OPEN && updateInfo?.assetUrl) {
+      setUpdateStatus('downloading');
+      setDownloadProgress({ percent: 0, downloaded: 0, total: 0 });
+      wsRef.current.send(JSON.stringify({ action: 'START_UPDATE', assetUrl: updateInfo.assetUrl }));
+    }
+  };
+
+  // Background update check 3 seconds after startup
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      handleCheckForUpdates(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [handleCheckForUpdates]);
+
   const handleThemeColorChange = (key: 'rxColor' | 'txColor' | 'textColor', color: string) => {
     setTheme((prev) => ({ ...prev, [key]: color }));
   };
@@ -411,6 +479,7 @@ export const App: React.FC = () => {
         isFrozen={isFrozen}
         onToggleFreeze={() => setIsFrozen(!isFrozen)}
         onOpenProtocolHelp={() => setIsHelpOpen(true)}
+        onCheckUpdate={() => handleCheckForUpdates(true)}
       />
 
       {/* 3. Main Center: Packet Grid Viewer + Right Control Sidebar */}
@@ -485,6 +554,19 @@ export const App: React.FC = () => {
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
         theme={theme}
+      />
+
+      {/* Update Modal */}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        theme={theme}
+        updateInfo={updateInfo}
+        updateStatus={updateStatus}
+        downloadProgress={downloadProgress}
+        statusMessage={updateStatusMessage}
+        onStartUpdate={handleStartUpdate}
+        onCheckForUpdates={() => handleCheckForUpdates(true)}
       />
     </div>
   );

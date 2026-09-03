@@ -14,6 +14,7 @@ interface MenuBarProps {
   isFrozen: boolean;
   onToggleFreeze: () => void;
   onOpenProtocolHelp: () => void;
+  onCheckUpdate: () => void;
 }
 
 export const MenuBar: React.FC<MenuBarProps> = ({
@@ -28,7 +29,8 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   onToggleAutoScroll,
   isFrozen,
   onToggleFreeze,
-  onOpenProtocolHelp
+  onOpenProtocolHelp,
+  onCheckUpdate
 }) => {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -105,7 +107,9 @@ export const MenuBar: React.FC<MenuBarProps> = ({
       id: 'help',
       label: 'Help',
       options: [
-        { label: 'COM Analyzer Mac v1.0 정보', action: onOpenProtocolHelp },
+        { label: '업데이트 확인...', action: onCheckUpdate },
+        { type: 'separator', divider: true },
+        { label: 'COM Analyzer v0.0.2 정보', action: onOpenProtocolHelp },
         { label: '단축키 안내', action: onOpenProtocolHelp }
       ]
     }
