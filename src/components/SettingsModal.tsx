@@ -115,7 +115,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const sidebarItems = [
-    { id: 'tcp', label: 'TCP 소켓 설정', icon: Server, desc: 'Server (Port: 121) / Client' },
+    { id: 'tcp', label: 'TCP 소켓 설정', icon: Server, desc: 'Server / Client 원격 접속' },
     { id: 'serial', label: '시리얼 포트 (COM)', icon: Cpu, desc: 'USB-to-UART / RS-232 / 485' },
     { id: 'virtual', label: '가상 시뮬레이터', icon: Wifi, desc: 'Modbus RTU / Sensor Stream' },
     { id: 'theme', label: '테마 및 화면', icon: Palette, desc: 'Classic Retro / Dark / Light' },
