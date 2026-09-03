@@ -8,12 +8,13 @@ import { UtilityPanel } from './components/UtilityPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { HelpModal } from './components/HelpModal';
 import { UpdateModal, type UpdateInfo } from './components/UpdateModal';
-import type {
-  Packet,
-  ConnectionStatus,
-  SerialPortInfo,
-  SerialConfig,
-  AppTheme
+import {
+  type Packet,
+  type ConnectionStatus,
+  type SerialPortInfo,
+  type SerialConfig,
+  type AppTheme,
+  APP_VERSION
 } from './types';
 
 export const App: React.FC = () => {
@@ -460,7 +461,7 @@ export const App: React.FC = () => {
         onNewWindow={() => window.open(window.location.href, '_blank', 'width=1200,height=800')}
         rxCount={rxCount}
         txCount={txCount}
-        appVersion={updateInfo?.currentVersion ? `v${updateInfo.currentVersion}` : 'v0.0.2'}
+        appVersion={`v${APP_VERSION}`}
       />
 
       {/* 2. Menu Bar */}

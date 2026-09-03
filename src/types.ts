@@ -1,5 +1,7 @@
 export type DataDirection = 'rx' | 'tx';
 
+export const APP_VERSION = '0.0.2';
+
 export interface ByteItem {
   id: number;
   byte: number;
