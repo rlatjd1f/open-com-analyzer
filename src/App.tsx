@@ -61,7 +61,7 @@ export const App: React.FC = () => {
 
   // Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'serial' | 'tcp' | 'virtual' | 'theme' | 'buffer'>('serial');
+  const [settingsTab, setSettingsTab] = useState<'tcp' | 'serial' | 'virtual' | 'theme' | 'buffer'>('tcp');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [insertedData, setInsertedData] = useState('');
 
@@ -253,7 +253,7 @@ export const App: React.FC = () => {
       // Cmd+, or Ctrl+, opens Settings
       if ((e.metaKey || e.ctrlKey) && (e.key === ',' || e.code === 'Comma')) {
         e.preventDefault();
-        setSettingsTab('serial');
+        setSettingsTab('tcp');
         setIsSettingsOpen((prev) => !prev);
         return;
       }
@@ -275,7 +275,7 @@ export const App: React.FC = () => {
     };
 
     const handleOpenSettingsEvent = () => {
-      setSettingsTab('serial');
+      setSettingsTab('tcp');
       setIsSettingsOpen(true);
     };
 
@@ -489,7 +489,7 @@ export const App: React.FC = () => {
           }))
         }
         onOpenSettings={() => {
-          setSettingsTab('serial');
+          setSettingsTab('tcp');
           setIsSettingsOpen(true);
         }}
         onNewWindow={() => window.open(window.location.href, '_blank', 'width=1200,height=800')}
@@ -503,7 +503,7 @@ export const App: React.FC = () => {
         theme={theme}
         onNewWindow={() => window.open(window.location.href, '_blank', 'width=1200,height=800')}
         onOpenSettings={(tab) => {
-          setSettingsTab(tab || 'serial');
+          setSettingsTab(tab || 'tcp');
           setIsSettingsOpen(true);
         }}
         onClearScreen={handleClearScreen}

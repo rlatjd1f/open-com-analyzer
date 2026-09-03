@@ -10,7 +10,7 @@ interface SettingsModalProps {
   ports: SerialPortInfo[];
   onRefreshPorts: () => void;
   status: ConnectionStatus;
-  initialTab?: 'serial' | 'tcp' | 'virtual' | 'theme' | 'buffer';
+  initialTab?: 'tcp' | 'serial' | 'virtual' | 'theme' | 'buffer';
   onConnectSerial: (config: SerialConfig) => void;
   onStartTcpServer: (port: number) => void;
   onConnectTcpClient: (host: string, port: number) => void;
@@ -28,7 +28,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   ports,
   onRefreshPorts,
   status,
-  initialTab = 'serial',
+  initialTab = 'tcp',
   onConnectSerial,
   onStartTcpServer,
   onConnectTcpClient,
@@ -37,7 +37,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   maxBufferPackets,
   onMaxBufferChange
 }) => {
-  const [activeTab, setActiveTab] = useState<'serial' | 'tcp' | 'virtual' | 'theme' | 'buffer'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'tcp' | 'serial' | 'virtual' | 'theme' | 'buffer'>(initialTab);
 
   // Serial Form State
   const [selectedPort, setSelectedPort] = useState(ports[0]?.path || '');
@@ -113,8 +113,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const sidebarItems = [
-    { id: 'serial', label: '시리얼 포트 (COM)', icon: Cpu, desc: 'USB-to-UART / RS-232 / 485' },
     { id: 'tcp', label: 'TCP 소켓 설정', icon: Server, desc: 'Server (Port: 121) / Client' },
+    { id: 'serial', label: '시리얼 포트 (COM)', icon: Cpu, desc: 'USB-to-UART / RS-232 / 485' },
     { id: 'virtual', label: '가상 시뮬레이터', icon: Wifi, desc: 'Modbus RTU / Sensor Stream' },
     { id: 'theme', label: '테마 및 화면', icon: Palette, desc: 'Classic Retro / Dark / Light' },
     { id: 'buffer', label: '버퍼 한도 관리', icon: Layers, desc: 'FIFO 링 버퍼 한도 설정' },
