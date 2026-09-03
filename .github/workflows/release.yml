@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -37,6 +39,41 @@ jobs:
 
       - name: Build Web Frontend & TypeScript
         run: npm run build
+
+      # --- Generate Incremental Changelog for this Release ---
+      - name: Generate Release Notes
+        shell: bash
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || echo "")
+          echo "## ⚡️ Open COM Analyzer ${{ github.ref_name }}" > RELEASE_BODY.md
+          echo "" >> RELEASE_BODY.md
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "### 🔄 이전 버전($PREV_TAG) 이후 변경 내역" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            git log "$PREV_TAG..${{ github.ref_name }}" --pretty=format:"* %s (%h)" --no-merges >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            echo "**전체 커밋 비교**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> RELEASE_BODY.md
+          else
+            echo "### 🚀 초기 릴리즈 내역" >> RELEASE_BODY.md
+            echo "" >> RELEASE_BODY.md
+            git log --pretty=format:"* %s (%h)" --no-merges >> RELEASE_BODY.md
+          fi
+
+          echo "" >> RELEASE_BODY.md
+          echo "---" >> RELEASE_BODY.md
+          echo "### 📦 다운로드 파일 (Assets)" >> RELEASE_BODY.md
+          echo "* **macOS (Apple Silicon)**: \`COM-Analyzer-macOS-arm64.zip\`" >> RELEASE_BODY.md
+          echo "* **macOS (Intel)**: \`COM-Analyzer-macOS-x64.zip\`" >> RELEASE_BODY.md
+          echo "* **Windows (64-bit)**: \`COM-Analyzer-Windows-x64.zip\`" >> RELEASE_BODY.md
+          echo "" >> RELEASE_BODY.md
+          echo "---" >> RELEASE_BODY.md
+          echo "### 💡 macOS 실행 시 '손상되었기 때문에 열 수 없습니다' 해결 방법" >> RELEASE_BODY.md
+          echo "터미널에서 아래 명령어를 1회 실행하여 격리 속성을 해제하세요:" >> RELEASE_BODY.md
+          echo "\`\`\`bash" >> RELEASE_BODY.md
+          echo "xattr -cr ~/Downloads/COM\ Analyzer.app" >> RELEASE_BODY.md
+          echo "\`\`\`" >> RELEASE_BODY.md
 
       # --- macOS Build Step ---
       - name: Package macOS Application (Apple Silicon & Intel)
@@ -71,9 +108,9 @@ jobs:
         with:
           files: |
             dist-app/*.zip
-          body_path: RELEASE_NOTES.md
+          body_path: RELEASE_BODY.md
           draft: false
           prerelease: false
-          generate_release_notes: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
