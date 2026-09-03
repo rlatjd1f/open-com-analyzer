@@ -1,6 +1,6 @@
-## ⚡️ Open COM Analyzer v0.0.1 릴리즈 안내
+## ⚡️ Open COM Analyzer v0.0.2 릴리즈 안내
 
-시리얼(Serial / RS-232 / RS-485) 및 TCP 통신 패킷을 실시간 바이트 매트릭스로 분석하고 송수신하는 크로스플랫폼 분석기 **Open COM Analyzer**의 첫 번째 공식 릴리즈입니다.
+시리얼(Serial / RS-232 / RS-485) 및 TCP 통신 패킷을 실시간 바이트 매트릭스로 분석하고 송수신하는 크로스플랫폼 분석기 **Open COM Analyzer**의 `v0.0.2` 릴리즈입니다.
 
 ---
 
