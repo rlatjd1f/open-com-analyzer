@@ -60,7 +60,7 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
 
   return (
     <div
-      className={`w-36 flex flex-col p-2 gap-2 text-xs select-none border-l overflow-y-auto shrink-0 ${
+      className={`w-[152px] flex flex-col p-2 gap-2 text-xs select-none border-l overflow-y-auto shrink-0 ${
         isRetro
           ? 'bg-[#ece9d8] text-black border-[#808080] font-sans'
           : isDark
@@ -69,7 +69,7 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
       }`}
     >
       {/* 1. Scroll & Buffer Limit Status Box */}
-      <div className="flex flex-col gap-1.5 border rounded p-1.5 bg-black/5 dark:bg-white/5">
+      <div className="flex flex-col gap-1.5 border rounded p-2 bg-black/5 dark:bg-white/5">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[10px] text-zinc-500 font-bold">STREAM</span>
           <span className="font-mono font-bold text-[11px] text-indigo-500">
@@ -85,13 +85,18 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
           </span>
         </div>
 
-        {/* Buffer Limit Quick Selector */}
-        <div className="flex items-center justify-between gap-1 pt-0.5 border-t border-black/10 dark:border-white/10">
-          <span className="text-[10px] text-zinc-500">한도</span>
+        {/* Buffer Limit Quick Selector (Full Width, No Overflow) */}
+        <div className="flex flex-col gap-1 pt-1.5 border-t border-black/10 dark:border-white/10">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-zinc-500 font-semibold">버퍼 한도</span>
+            <span className="text-[9px] font-mono text-zinc-400">
+              {maxBufferPackets === 0 ? '무제한' : `${maxBufferPackets.toLocaleString()}행`}
+            </span>
+          </div>
           <select
             value={maxBufferPackets}
             onChange={(e) => onMaxBufferChange(parseInt(e.target.value, 10))}
-            className={`font-mono text-[10px] font-bold px-1 py-0.5 rounded border outline-none ${
+            className={`w-full font-mono text-[10px] font-medium px-1.5 py-1 rounded border outline-none cursor-pointer ${
               isRetro
                 ? 'bg-white text-black border-[#808080]'
                 : isDark
@@ -99,11 +104,11 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
                 : 'bg-white text-zinc-800 border-zinc-300'
             }`}
           >
-            <option value={500}>500개</option>
+            <option value={500}>500개 (가벼움)</option>
             <option value={1000}>1,000개 (기본)</option>
             <option value={2000}>2,000개</option>
             <option value={5000}>5,000개</option>
-            <option value={0}>무제한</option>
+            <option value={0}>무제한 (All)</option>
           </select>
         </div>
 
