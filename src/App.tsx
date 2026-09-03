@@ -460,6 +460,7 @@ export const App: React.FC = () => {
         onNewWindow={() => window.open(window.location.href, '_blank', 'width=1200,height=800')}
         rxCount={rxCount}
         txCount={txCount}
+        appVersion={updateInfo?.currentVersion ? `v${updateInfo.currentVersion}` : 'v0.0.2'}
       />
 
       {/* 2. Menu Bar */}

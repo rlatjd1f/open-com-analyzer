@@ -10,6 +10,7 @@ interface TitleBarProps {
   onNewWindow: () => void;
   rxCount: number;
   txCount: number;
+  appVersion?: string;
 }
 
 export const TitleBar: React.FC<TitleBarProps> = ({
@@ -19,7 +20,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   onOpenSettings,
   onNewWindow,
   rxCount,
-  txCount
+  txCount,
+  appVersion = 'v0.0.2'
 }) => {
   // Title text matching the classic app format
   let titleText = 'COM ANALYZER';
@@ -51,10 +53,21 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           : 'bg-[#f4f4f5]/90 text-zinc-700 border-zinc-200 backdrop-blur-md'
       }`}
     >
-      {/* Left: App Title */}
+      {/* Left: App Title & Version Badge */}
       <div className="flex items-center gap-2 min-w-0">
         <span className={`font-semibold tracking-tight truncate max-w-md ${isRetro ? 'font-bold' : ''}`}>
           {titleText}
+        </span>
+        <span
+          className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm shrink-0 select-none ${
+            isRetro
+              ? 'bg-[#15213b] text-[#55f2ff] border border-[#6d8bc9]'
+              : isDark
+              ? 'bg-zinc-800 text-indigo-400 border border-zinc-700/80'
+              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+          }`}
+        >
+          {appVersion}
         </span>
       </div>
 
