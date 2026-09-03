@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AppTheme, Packet } from '../types';
-import { Send, Play, Square, Zap, Star, Clock, Trash2, Plus, ChevronDown } from 'lucide-react';
+import { Send, Play, Square, Zap, Star, Clock, Trash2, Plus, ChevronDown, Edit3 } from 'lucide-react';
 
 interface FavoritePacket {
   id: string;
@@ -30,7 +30,7 @@ const DEFAULT_PRESETS: FavoritePacket[] = [
   },
   {
     id: 'preset-ping',
-    label: 'Ping 문자열 (ASCII)',
+    label: 'Ping 통신 테스트 (ASCII)',
     data: 'PING',
     format: 'ascii',
     isFavorite: true,
@@ -56,6 +56,8 @@ export const SendPanel: React.FC<SendPanelProps> = ({
 
   // Frequent Packets Dropdown State
   const [isFavoritesOpen, setIsFavoritesOpen] = useState(false);
+  const [editingAliasId, setEditingAliasId] = useState<string | null>(null);
+  const [editingAliasValue, setEditingAliasValue] = useState('');
   const [packetList, setPacketList] = useState<FavoritePacket[]>(() => {
     try {
       const saved = localStorage.getItem('com_analyzer_frequent_packets');
@@ -204,12 +206,26 @@ export const SendPanel: React.FC<SendPanelProps> = ({
     setPacketList((prev) => prev.filter((p) => p.id !== id));
   };
 
+  const handleStartEditAlias = (pkt: FavoritePacket, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingAliasId(pkt.id);
+    setEditingAliasValue(pkt.label || '');
+  };
+
+  const handleSaveAlias = (id: string) => {
+    const trimmed = editingAliasValue.trim();
+    setPacketList((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, label: trimmed || undefined } : p))
+    );
+    setEditingAliasId(null);
+  };
+
   const handleAddCurrentAsFavorite = () => {
     if (!data.trim()) {
       alert('저장할 데이터를 먼저 입력해주세요.');
       return;
     }
-    const label = prompt('이 패킷의 이름을 입력하세요 (예: 밸브 열기 명령):', '') || undefined;
+    const label = prompt('이 패킷의 별칭(이름)을 입력하세요 (예: 밸브 열기, 센서 요청):', '') || undefined;
     const newItem: FavoritePacket = {
       id: `fav-${Date.now()}`,
       label,
@@ -395,44 +411,93 @@ export const SendPanel: React.FC<SendPanelProps> = ({
                         }`}
                       >
                         <div className="flex-1 min-w-0">
-                          {pkt.label && (
-                            <div className="font-semibold text-xs text-indigo-400 truncate mb-0.5">
-                              {pkt.label}
+                          {editingAliasId === pkt.id ? (
+                            <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editingAliasValue}
+                                onChange={(e) => setEditingAliasValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveAlias(pkt.id);
+                                  if (e.key === 'Escape') setEditingAliasId(null);
+                                }}
+                                placeholder="별칭/설명 입력 (예: 밸브 열기)..."
+                                className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-sans ${
+                                  isRetro
+                                    ? 'bg-white text-black border-[#808080]'
+                                    : 'bg-zinc-900 text-white border-zinc-600'
+                                }`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveAlias(pkt.id)}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-600 text-white shrink-0 hover:bg-indigo-500"
+                              >
+                                저장
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingAliasId(null)}
+                                className="px-1.5 py-0.5 text-[10px] rounded hover:bg-zinc-500/20 shrink-0"
+                              >
+                                취소
+                              </button>
                             </div>
+                          ) : (
+                            <>
+                              {pkt.label ? (
+                                <div className="flex items-center gap-1 mb-0.5">
+                                  <span className="font-semibold text-xs text-indigo-400 truncate">
+                                    {pkt.label}
+                                  </span>
+                                </div>
+                              ) : null}
+                              <div className="font-mono text-xs truncate opacity-90">
+                                {pkt.data}
+                              </div>
+                            </>
                           )}
-                          <div className="font-mono text-xs truncate opacity-90">
-                            {pkt.data}
-                          </div>
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className={`text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
-                            pkt.format === 'hex'
-                              ? 'bg-indigo-500/20 text-indigo-400'
-                              : 'bg-emerald-500/20 text-emerald-400'
-                          }`}>
-                            {pkt.format}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleToggleFavorite(pkt.id, e)}
-                            className="p-1 rounded text-amber-400 hover:scale-110 transition-transform"
-                            title="즐겨찾기 해제"
-                          >
-                            <Star size={13} className="fill-amber-400" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSendSpecificPacket(pkt);
-                            }}
-                            className="p-1 rounded hover:bg-indigo-600 hover:text-white transition-colors text-zinc-400"
-                            title="즉시 전송"
-                          >
-                            <Send size={12} />
-                          </button>
-                        </div>
+                        {editingAliasId !== pkt.id && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className={`text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
+                              pkt.format === 'hex'
+                                ? 'bg-indigo-500/20 text-indigo-400'
+                                : 'bg-emerald-500/20 text-emerald-400'
+                            }`}>
+                              {pkt.format}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleStartEditAlias(pkt, e)}
+                              className="p-1 rounded hover:bg-zinc-500/20 text-zinc-400 hover:text-indigo-400 transition-colors"
+                              title="별칭(이름) 수정"
+                            >
+                              <Edit3 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleFavorite(pkt.id, e)}
+                              className="p-1 rounded text-amber-400 hover:scale-110 transition-transform"
+                              title="즐겨찾기 해제"
+                            >
+                              <Star size={13} className="fill-amber-400" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSendSpecificPacket(pkt);
+                              }}
+                              className="p-1 rounded hover:bg-indigo-600 hover:text-white transition-colors text-zinc-400"
+                              title="즉시 전송"
+                            >
+                              <Send size={12} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -474,35 +539,91 @@ export const SendPanel: React.FC<SendPanelProps> = ({
                             : 'bg-zinc-50 border-zinc-200 hover:bg-zinc-100'
                         }`}
                       >
-                        <div className="flex-1 min-w-0 font-mono text-xs truncate">
-                          {pkt.data}
+                        <div className="flex-1 min-w-0">
+                          {editingAliasId === pkt.id ? (
+                            <div className="flex items-center gap-1 w-full" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="text"
+                                autoFocus
+                                value={editingAliasValue}
+                                onChange={(e) => setEditingAliasValue(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleSaveAlias(pkt.id);
+                                  if (e.key === 'Escape') setEditingAliasId(null);
+                                }}
+                                placeholder="별칭/설명 입력 (예: 센서 요청)..."
+                                className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-sans ${
+                                  isRetro
+                                    ? 'bg-white text-black border-[#808080]'
+                                    : 'bg-zinc-900 text-white border-zinc-600'
+                                }`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleSaveAlias(pkt.id)}
+                                className="px-2 py-0.5 text-[10px] font-bold rounded bg-indigo-600 text-white shrink-0 hover:bg-indigo-500"
+                              >
+                                저장
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingAliasId(null)}
+                                className="px-1.5 py-0.5 text-[10px] rounded hover:bg-zinc-500/20 shrink-0"
+                              >
+                                취소
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              {pkt.label ? (
+                                <div className="flex items-center gap-1 mb-0.5">
+                                  <span className="font-semibold text-xs text-indigo-400 truncate">
+                                    {pkt.label}
+                                  </span>
+                                </div>
+                              ) : null}
+                              <div className="font-mono text-xs truncate opacity-90">
+                                {pkt.data}
+                              </div>
+                            </>
+                          )}
                         </div>
 
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className={`text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
-                            pkt.format === 'hex'
-                              ? 'bg-indigo-500/20 text-indigo-400'
-                              : 'bg-emerald-500/20 text-emerald-400'
-                          }`}>
-                            {pkt.format}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={(e) => handleToggleFavorite(pkt.id, e)}
-                            className="p-1 rounded text-zinc-500 hover:text-amber-400 transition-colors"
-                            title="즐겨찾기에 등록"
-                          >
-                            <Star size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeletePacket(pkt.id, e)}
-                            className="p-1 rounded text-zinc-500 hover:text-red-400 transition-colors"
-                            title="삭제"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
+                        {editingAliasId !== pkt.id && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className={`text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded ${
+                              pkt.format === 'hex'
+                                ? 'bg-indigo-500/20 text-indigo-400'
+                                : 'bg-emerald-500/20 text-emerald-400'
+                            }`}>
+                              {pkt.format}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => handleStartEditAlias(pkt, e)}
+                              className="p-1 rounded hover:bg-zinc-500/20 text-zinc-500 hover:text-indigo-400 transition-colors"
+                              title="별칭(이름) 추가/수정"
+                            >
+                              <Edit3 size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleFavorite(pkt.id, e)}
+                              className="p-1 rounded text-zinc-500 hover:text-amber-400 transition-colors"
+                              title="즐겨찾기에 등록"
+                            >
+                              <Star size={13} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeletePacket(pkt.id, e)}
+                              className="p-1 rounded text-zinc-500 hover:text-red-400 transition-colors"
+                              title="삭제"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
