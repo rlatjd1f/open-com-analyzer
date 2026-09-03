@@ -109,7 +109,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
       options: [
         { label: '업데이트 확인...', action: onCheckUpdate },
         { type: 'separator', divider: true },
-        { label: 'COM Analyzer v0.0.2 정보', action: onOpenProtocolHelp },
+        { label: 'COM Analyzer v0.0.3 정보', action: onOpenProtocolHelp },
         { label: '단축키 안내', action: onOpenProtocolHelp }
       ]
     }
