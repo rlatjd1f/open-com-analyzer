@@ -39,16 +39,29 @@ export const App: React.FC = () => {
   const [txBlinking, setTxBlinking] = useState(false);
   const [lastRxPacket, setLastRxPacket] = useState<Packet | null>(null);
 
-  // Buffer Limit State (Default: 1,000 packets)
-  const [maxBufferPackets, setMaxBufferPackets] = useState(1000);
+  // Buffer Limit State (Persisted in localStorage, Default: 1,000 packets)
+  const [maxBufferPackets, setMaxBufferPackets] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('com_analyzer_buffer_limit');
+      if (saved !== null) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val)) return val;
+      }
+    } catch (e) {}
+    return 1000;
+  });
+
   const maxBufferPacketsRef = useRef(maxBufferPackets);
   useEffect(() => {
     maxBufferPacketsRef.current = maxBufferPackets;
+    try {
+      localStorage.setItem('com_analyzer_buffer_limit', String(maxBufferPackets));
+    } catch (e) {}
   }, [maxBufferPackets]);
 
   // Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'serial' | 'tcp' | 'virtual' | 'buffer'>('serial');
+  const [settingsTab, setSettingsTab] = useState<'serial' | 'tcp' | 'virtual' | 'theme' | 'buffer'>('serial');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [insertedData, setInsertedData] = useState('');
 
@@ -59,13 +72,34 @@ export const App: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState({ percent: 0, downloaded: 0, total: 0 });
   const [updateStatusMessage, setUpdateStatusMessage] = useState('');
 
-  // Theme
-  const [theme, setTheme] = useState<AppTheme>({
-    name: 'classic-retro', // Default to matching screenshot's authentic analyzer aesthetic
-    rxColor: '#FF9900',
-    txColor: '#008080',
-    textColor: '#000000'
+  // Theme (Persisted in localStorage)
+  const [theme, setTheme] = useState<AppTheme>(() => {
+    try {
+      const saved = localStorage.getItem('com_analyzer_theme');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.name && parsed.rxColor && parsed.txColor) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load saved theme:', e);
+    }
+    return {
+      name: 'classic-retro',
+      rxColor: '#FF9900',
+      txColor: '#008080',
+      textColor: '#000000'
+    };
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('com_analyzer_theme', JSON.stringify(theme));
+    } catch (e) {
+      console.warn('Failed to save theme:', e);
+    }
+  }, [theme]);
 
   const wsRef = useRef<WebSocket | null>(null);
   const rxBlinkTimer = useRef<any>(null);
