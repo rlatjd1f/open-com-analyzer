@@ -1,0 +1,70 @@
+name: Build and Release Cross-Platform Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin
+          - os: windows-latest
+            platform: win32
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Web Frontend & TypeScript
+        run: npm run build
+
+      # --- macOS Build Step ---
+      - name: Package macOS Application (Apple Silicon & Intel)
+        if: matrix.os == 'macos-latest'
+        run: |
+          npx electron-packager . "COM Analyzer" --platform=darwin --arch=arm64,x64 --icon=assets/icon.icns --app-bundle-id="com.analyzer.comanalyzer" --app-version="${{ github.ref_name }}" --build-version="1.0.0" --out=dist-app --overwrite
+          cd dist-app
+          ditto -c -k --sequesterRsrc --keepParent "COM Analyzer-darwin-arm64/COM Analyzer.app" "COM-Analyzer-macOS-arm64.zip"
+          ditto -c -k --sequesterRsrc --keepParent "COM Analyzer-darwin-x64/COM Analyzer.app" "COM-Analyzer-macOS-x64.zip"
+
+      # --- Windows Build Step ---
+      - name: Package Windows Application (x64)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          npx electron-packager . "COM Analyzer" --platform=win32 --arch=x64 --app-version="${{ github.ref_name }}" --build-version="1.0.0" --out=dist-app --overwrite
+          cd dist-app
+          7z a -tzip "COM-Analyzer-Windows-x64.zip" "COM Analyzer-win32-x64"
+
+      # --- Release Upload Step ---
+      - name: Upload Binaries to GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist-app/*.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
