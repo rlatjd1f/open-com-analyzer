@@ -86,9 +86,9 @@ export const App: React.FC = () => {
       console.warn('Failed to load saved theme:', e);
     }
     return {
-      name: 'classic-retro',
-      rxColor: '#FF9900',
-      txColor: '#008080',
+      name: 'modern-light',
+      rxColor: '#f59e0b',
+      txColor: '#06b6d4',
       textColor: '#000000'
     };
   });
