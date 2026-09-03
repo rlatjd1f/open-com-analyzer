@@ -538,6 +538,15 @@ export const App: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         theme={theme}
+        onThemeChange={(name) =>
+          setTheme((prev) => ({
+            ...prev,
+            name,
+            rxColor: name === 'classic-retro' ? '#FF9900' : '#f59e0b',
+            txColor: name === 'classic-retro' ? '#008080' : '#06b6d4',
+            textColor: name === 'classic-retro' ? '#000000' : '#000000'
+          }))
+        }
         ports={ports}
         onRefreshPorts={handleRefreshPorts}
         status={status}
