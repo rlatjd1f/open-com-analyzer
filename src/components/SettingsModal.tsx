@@ -717,7 +717,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         : 'bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white'
                     }`}
                   >
-                    {tcpMode === 'server' ? 'TCP 서버 시작 (Port 121)' : 'TCP 서버 접속'}
+                    {tcpMode === 'server' ? 'TCP 서버 시작' : 'TCP 서버 접속'}
                   </button>
                 )}
 

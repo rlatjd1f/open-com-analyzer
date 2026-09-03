@@ -86,17 +86,31 @@ class TcpService {
   }
 
   stopServer() {
-    if (this.server) {
-      for (const client of this.serverClients) {
-        try { client.destroy(); } catch (e) {}
-      }
-      this.serverClients.clear();
-      this.server.close(() => {
-        this.server = null;
+    return new Promise((resolve) => {
+      if (this.server) {
+        for (const client of this.serverClients) {
+          try { client.destroy(); } catch (e) {}
+        }
+        this.serverClients.clear();
+        try {
+          this.server.close(() => {
+            this.server = null;
+            this.mode = null;
+            this._emitStatus({ connected: false, type: null, info: '연결되지 않음' });
+            resolve();
+          });
+        } catch (e) {
+          this.server = null;
+          this.mode = null;
+          this._emitStatus({ connected: false, type: null, info: '연결되지 않음' });
+          resolve();
+        }
+      } else {
         this.mode = null;
-        this._emitStatus({ connected: false, info: 'TCP Server stopped' });
-      });
-    }
+        this._emitStatus({ connected: false, type: null, info: '연결되지 않음' });
+        resolve();
+      }
+    });
   }
 
   // --- TCP Client Mode ---
@@ -128,11 +142,11 @@ class TcpService {
       this.clientSocket.on('close', () => {
         this.clientSocket = null;
         this.mode = null;
-        this._emitStatus({ connected: false, info: 'TCP Client disconnected' });
+        this._emitStatus({ connected: false, type: null, info: '연결되지 않음' });
       });
 
       this.clientSocket.on('error', (err) => {
-        this._emitStatus({ connected: false, error: err.message });
+        this._emitStatus({ connected: false, type: null, error: err.message, info: '연결 오류' });
         reject(err);
       });
     });
@@ -140,10 +154,23 @@ class TcpService {
 
   disconnectClient() {
     if (this.clientSocket) {
-      this.clientSocket.destroy();
+      try {
+        this.clientSocket.destroy();
+      } catch (e) {}
       this.clientSocket = null;
       this.mode = null;
-      this._emitStatus({ connected: false, info: 'Disconnected' });
+      this._emitStatus({ connected: false, type: null, info: '연결되지 않음' });
+    }
+  }
+
+  // Unified close for both server and client modes
+  async close() {
+    if (this.mode === 'server' || this.server) {
+      await this.stopServer();
+    } else if (this.mode === 'client' || this.clientSocket) {
+      this.disconnectClient();
+    } else {
+      this._emitStatus({ connected: false, type: null, info: '연결되지 않음' });
     }
   }
 

@@ -61,17 +61,20 @@ wss.on('connection', async (ws) => {
 
   const closeAll = async () => {
     try {
-      if (activeService === 'serial') {
-        await serialService.close();
-      } else if (activeService === 'tcp') {
-        await tcpService.close();
-      } else if (activeService === 'virtual') {
-        virtualDevice.stop();
-      }
+      await Promise.allSettled([
+        serialService.close(),
+        tcpService.close(),
+        Promise.resolve(virtualDevice.stop())
+      ]);
     } catch (err) {
       console.warn('Error during service cleanup:', err);
     } finally {
       activeService = null;
+      handleStatusChange({
+        connected: false,
+        type: null,
+        info: '연결되지 않음'
+      });
     }
   };
 

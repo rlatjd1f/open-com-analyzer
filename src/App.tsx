@@ -327,6 +327,7 @@ export const App: React.FC = () => {
   };
 
   const handleDisconnect = () => {
+    setStatus({ connected: false, type: null, info: '연결되지 않음' });
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ action: 'DISCONNECT' }));
     }
@@ -508,6 +509,7 @@ export const App: React.FC = () => {
           setSettingsTab(tab || 'tcp');
           setIsSettingsOpen(true);
         }}
+        onDisconnect={handleDisconnect}
         onClearScreen={handleClearScreen}
         onSaveLog={handleSaveLog}
         onOpenLog={handleOpenLog}

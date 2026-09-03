@@ -5,6 +5,7 @@ interface MenuBarProps {
   theme: AppTheme;
   onNewWindow: () => void;
   onOpenSettings: (initialTab?: 'serial' | 'tcp' | 'virtual' | 'buffer') => void;
+  onDisconnect?: () => void;
   onClearScreen: () => void;
   onSaveLog: () => void;
   onOpenLog: () => void;
@@ -21,6 +22,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
   theme,
   onNewWindow,
   onOpenSettings,
+  onDisconnect,
   onClearScreen,
   onSaveLog,
   onOpenLog,
@@ -65,9 +67,11 @@ export const MenuBar: React.FC<MenuBarProps> = ({
       id: 'comm',
       label: '통신 설정',
       options: [
+        { label: 'TCP 소켓 설정...', action: () => onOpenSettings('tcp') },
         { label: '시리얼 (COM 포트) 설정...', action: () => onOpenSettings('serial') },
-        { label: 'TCP 서버 설정 (기본: 121)...', action: () => onOpenSettings('tcp') },
-        { label: '가상 장치 시뮬레이터...', action: () => onOpenSettings('virtual') }
+        { label: '가상 장치 시뮬레이터...', action: () => onOpenSettings('virtual') },
+        { type: 'separator', divider: true },
+        { label: '현재 통신 연결 종료 (Disconnect)', action: () => onDisconnect && onDisconnect() }
       ]
     },
     {
