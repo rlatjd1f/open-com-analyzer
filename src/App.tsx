@@ -8,7 +8,6 @@ import { UtilityPanel } from './components/UtilityPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { HelpModal } from './components/HelpModal';
 import type {
-  ByteItem,
   Packet,
   ConnectionStatus,
   SerialPortInfo,
@@ -23,7 +22,6 @@ export const App: React.FC = () => {
     info: '연결 대기중'
   });
   const [ports, setPorts] = useState<SerialPortInfo[]>([]);
-  const [bytes, setBytes] = useState<ByteItem[]>([]);
   const [packets, setPackets] = useState<Packet[]>([]);
   const [rxCount, setRxCount] = useState(0);
   const [txCount, setTxCount] = useState(0);
@@ -48,7 +46,7 @@ export const App: React.FC = () => {
 
   // Modals
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<'serial' | 'tcp' | 'virtual'>('serial');
+  const [settingsTab, setSettingsTab] = useState<'serial' | 'tcp' | 'virtual' | 'buffer'>('serial');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [insertedData, setInsertedData] = useState('');
 
@@ -93,33 +91,18 @@ export const App: React.FC = () => {
 
               const { direction, bytes: newBytes, hex, ascii, length, timestamp, source } = msg;
 
-              // Update counters
+              // Update counters & throttled blinker
               if (direction === 'rx') {
                 setRxCount((prev) => prev + length);
-                // Trigger RX LED blink
                 setRxBlinking(true);
                 clearTimeout(rxBlinkTimer.current);
-                rxBlinkTimer.current = setTimeout(() => setRxBlinking(false), 90);
+                rxBlinkTimer.current = setTimeout(() => setRxBlinking(false), 70);
               } else {
                 setTxCount((prev) => prev + length);
-                // Trigger TX LED blink
                 setTxBlinking(true);
                 clearTimeout(txBlinkTimer.current);
-                txBlinkTimer.current = setTimeout(() => setTxBlinking(false), 90);
+                txBlinkTimer.current = setTimeout(() => setTxBlinking(false), 70);
               }
-
-              // Append byte items
-              setBytes((prev) => {
-                const startId = prev.length > 0 ? prev[prev.length - 1].id + 1 : 1;
-                const items: ByteItem[] = newBytes.map((b: number, idx: number) => ({
-                  id: startId + idx,
-                  byte: b,
-                  direction,
-                  timestamp,
-                  source
-                }));
-                return [...prev, ...items];
-              });
 
               // Create packet object
               const newPacket: Packet = {
@@ -193,7 +176,6 @@ export const App: React.FC = () => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.code === 'KeyK')) {
         e.preventDefault();
         setPackets([]);
-        setBytes([]);
         setRxCount(0);
         setTxCount(0);
         return;
@@ -271,7 +253,6 @@ export const App: React.FC = () => {
   };
 
   const handleClearScreen = () => {
-    setBytes([]);
     setPackets([]);
     setRxCount(0);
     setTxCount(0);
@@ -328,20 +309,24 @@ export const App: React.FC = () => {
     reader.onload = (event) => {
       try {
         const text = event.target?.result as string;
-        // Parse hex bytes if contains hex pairs
         const cleanHex = text.replace(/[^0-9a-fA-F]/g, '');
         if (cleanHex.length >= 2) {
-          const loadedBytes: ByteItem[] = [];
+          const byteArr: number[] = [];
           for (let i = 0; i < cleanHex.length; i += 2) {
-            loadedBytes.push({
-              id: loadedBytes.length + 1,
-              byte: parseInt(cleanHex.substr(i, 2), 16),
-              direction: 'rx',
-              timestamp: Date.now()
-            });
+            byteArr.push(parseInt(cleanHex.substr(i, 2), 16));
           }
-          setBytes(loadedBytes);
-          alert(`${loadedBytes.length} 바이트 데이터를 로드했습니다.`);
+          const loadedPkt: Packet = {
+            id: `loaded-${Date.now()}`,
+            direction: 'rx',
+            bytes: byteArr,
+            hex: cleanHex,
+            ascii: byteArr.map(b => b >= 32 && b <= 126 ? String.fromCharCode(b) : '.').join(''),
+            length: byteArr.length,
+            timestamp: Date.now()
+          };
+          setPackets([loadedPkt]);
+          setRxCount(byteArr.length);
+          alert(`${byteArr.length} 바이트 데이터를 로드했습니다.`);
         } else {
           alert('유효한 16진수 데이터를 찾을 수 없습니다.');
         }
@@ -430,7 +415,7 @@ export const App: React.FC = () => {
         />
 
         <ControlSidebar
-          totalBytesCount={bytes.length}
+          totalBytesCount={rxCount + txCount}
           packetCount={packets.length}
           maxBufferPackets={maxBufferPackets}
           onMaxBufferChange={setMaxBufferPackets}
