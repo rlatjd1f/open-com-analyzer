@@ -221,20 +221,25 @@ export const SendPanel: React.FC<SendPanelProps> = ({
   };
 
   const handleAddCurrentAsFavorite = () => {
-    if (!data.trim()) {
-      alert('저장할 데이터를 먼저 입력해주세요.');
+    const trimmed = data.trim();
+    if (!trimmed) {
+      alert('먼저 입력창에 보낼 패킷 데이터를 입력해주세요.');
       return;
     }
-    const label = prompt('이 패킷의 별칭(이름)을 입력하세요 (예: 밸브 열기, 센서 요청):', '') || undefined;
+    const newItemId = `fav-${Date.now()}`;
     const newItem: FavoritePacket = {
-      id: `fav-${Date.now()}`,
-      label,
-      data: data.trim(),
+      id: newItemId,
+      label: undefined,
+      data: trimmed,
       format,
       isFavorite: true,
       timestamp: Date.now()
     };
-    setPacketList((prev) => [newItem, ...prev.filter((p) => p.data !== data.trim())]);
+    // Prepend to list, removing duplicate data
+    setPacketList((prev) => [newItem, ...prev.filter((p) => p.data !== trimmed)]);
+    // Automatically open inline alias editor for this new item
+    setEditingAliasId(newItemId);
+    setEditingAliasValue('');
   };
 
   // 1. Auto repeat timer
