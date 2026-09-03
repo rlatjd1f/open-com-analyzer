@@ -27,6 +27,169 @@ interface UpdateModalProps {
   onCheckForUpdates: () => void;
 }
 
+const FormattedMarkdown: React.FC<{ content: string; isRetro: boolean; isDark: boolean }> = ({
+  content,
+  isRetro,
+  isDark
+}) => {
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let inCodeBlock = false;
+  let codeBlockLines: string[] = [];
+
+  const parseInline = (text: string) => {
+    const parts: React.ReactNode[] = [];
+    let keyIdx = 0;
+    const regex = /(\*\*.*?\*\*|`.*?`|\[.*?\]\(.*?\)|https?:\/\/[^\s]+)/g;
+    let match;
+    let lastIndex = 0;
+
+    while ((match = regex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(text.substring(lastIndex, match.index));
+      }
+      const token = match[0];
+      if (token.startsWith('**') && token.endsWith('**')) {
+        parts.push(<strong key={keyIdx++} className="font-bold">{token.slice(2, -2)}</strong>);
+      } else if (token.startsWith('`') && token.endsWith('`')) {
+        parts.push(
+          <code
+            key={keyIdx++}
+            className={`px-1.5 py-0.5 rounded text-[11px] font-mono ${
+              isRetro
+                ? 'bg-zinc-200 text-blue-900 border border-zinc-300'
+                : isDark
+                ? 'bg-zinc-800 text-indigo-300 border border-zinc-700'
+                : 'bg-zinc-100 text-indigo-600 border border-zinc-200'
+            }`}
+          >
+            {token.slice(1, -1)}
+          </code>
+        );
+      } else if (token.startsWith('[') && token.includes('](')) {
+        const linkText = token.substring(1, token.indexOf(']('));
+        const linkUrl = token.substring(token.indexOf('](') + 2, token.length - 1);
+        parts.push(
+          <a
+            key={keyIdx++}
+            href={linkUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-indigo-400 hover:underline inline-flex items-center gap-0.5 font-medium"
+          >
+            {linkText}
+          </a>
+        );
+      } else if (token.startsWith('http')) {
+        parts.push(
+          <a
+            key={keyIdx++}
+            href={token}
+            target="_blank"
+            rel="noreferrer"
+            className="text-indigo-400 hover:underline break-all"
+          >
+            {token}
+          </a>
+        );
+      }
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  };
+
+  lines.forEach((line, idx) => {
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith('```')) {
+      if (inCodeBlock) {
+        elements.push(
+          <pre
+            key={`code-${idx}`}
+            className={`p-2.5 rounded-md text-[11px] font-mono overflow-x-auto my-2 border ${
+              isRetro
+                ? 'bg-zinc-100 border-zinc-400 text-black'
+                : isDark
+                ? 'bg-zinc-950 border-zinc-800 text-emerald-400'
+                : 'bg-zinc-900 border-zinc-800 text-emerald-300'
+            }`}
+          >
+            {codeBlockLines.join('\n')}
+          </pre>
+        );
+        codeBlockLines = [];
+        inCodeBlock = false;
+      } else {
+        inCodeBlock = true;
+      }
+      return;
+    }
+
+    if (inCodeBlock) {
+      codeBlockLines.push(line);
+      return;
+    }
+
+    if (trimmed === '---') {
+      elements.push(
+        <hr key={`hr-${idx}`} className={`my-2.5 border-t ${isRetro ? 'border-zinc-400' : 'border-zinc-800'}`} />
+      );
+      return;
+    }
+
+    if (trimmed.startsWith('### ')) {
+      elements.push(
+        <h3 key={`h3-${idx}`} className="font-bold text-xs mt-3 mb-1 text-indigo-400 flex items-center gap-1.5">
+          {parseInline(trimmed.replace(/^###\s+/, ''))}
+        </h3>
+      );
+      return;
+    }
+
+    if (trimmed.startsWith('## ')) {
+      elements.push(
+        <h2 key={`h2-${idx}`} className="font-bold text-sm mt-3 mb-1 text-emerald-400 flex items-center gap-1.5">
+          {parseInline(trimmed.replace(/^##\s+/, ''))}
+        </h2>
+      );
+      return;
+    }
+
+    if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
+      const isIndented = line.startsWith('  ') || line.startsWith('\t');
+      elements.push(
+        <div
+          key={`li-${idx}`}
+          className={`flex items-start gap-1.5 leading-relaxed my-0.5 ${
+            isIndented ? 'ml-4 opacity-90 text-[11px]' : 'font-medium text-xs'
+          }`}
+        >
+          <span className={`shrink-0 ${isIndented ? 'text-zinc-500' : 'text-indigo-400 font-bold'}`}>
+            {isIndented ? '•' : '▪'}
+          </span>
+          <div className="flex-1">{parseInline(trimmed.replace(/^[\*\-]\s+/, ''))}</div>
+        </div>
+      );
+      return;
+    }
+
+    if (trimmed) {
+      elements.push(
+        <p key={`p-${idx}`} className="my-1 leading-relaxed text-xs">
+          {parseInline(line)}
+        </p>
+      );
+    }
+  });
+
+  return <div className="space-y-1">{elements}</div>;
+};
+
 export const UpdateModal: React.FC<UpdateModalProps> = ({
   isOpen,
   onClose,
@@ -133,7 +296,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
                 <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-semibold opacity-80">업데이트 주요 변경 내역</span>
                   <div
-                    className={`max-h-48 overflow-y-auto p-3 rounded-lg text-xs leading-relaxed font-mono whitespace-pre-wrap border ${
+                    className={`max-h-52 overflow-y-auto p-3.5 rounded-lg text-xs leading-relaxed border ${
                       isRetro
                         ? 'bg-white border-[#808080] text-black'
                         : isDark
@@ -141,7 +304,11 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
                         : 'bg-zinc-50 border-zinc-200 text-zinc-700'
                     }`}
                   >
-                    {updateInfo.releaseNotes}
+                    <FormattedMarkdown
+                      content={updateInfo.releaseNotes}
+                      isRetro={isRetro}
+                      isDark={isDark}
+                    />
                   </div>
                 </div>
               )}
@@ -193,7 +360,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
               <CheckCircle2 size={36} className="text-emerald-500" />
               <div className="font-bold text-base">최신 버전을 사용하고 있습니다!</div>
               <p className="text-xs opacity-70 font-mono">
-                현재 설치된 버전: v{updateInfo?.currentVersion || '0.0.2'}
+                현재 설치된 버전: v{updateInfo?.currentVersion || '0.0.3'}
               </p>
             </div>
           )}
@@ -232,7 +399,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
                     }`}
                   >
                     <Download size={14} />
-                    <span>지금 원클릭 업데이트</span>
+                    <span>지금 업데이트</span>
                   </button>
                 </>
               ) : (
