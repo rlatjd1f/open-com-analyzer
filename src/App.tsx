@@ -164,6 +164,13 @@ export const App: React.FC = () => {
   // Keyboard shortcuts & System Menu events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+N or Ctrl+N opens a new window
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'n' || e.code === 'KeyN')) {
+        e.preventDefault();
+        window.open(window.location.href, '_blank', 'width=1200,height=800');
+        return;
+      }
+
       // Cmd+, or Ctrl+, opens Settings
       if ((e.metaKey || e.ctrlKey) && (e.key === ',' || e.code === 'Comma')) {
         e.preventDefault();
@@ -389,6 +396,7 @@ export const App: React.FC = () => {
       {/* 2. Menu Bar */}
       <MenuBar
         theme={theme}
+        onNewWindow={() => window.open(window.location.href, '_blank', 'width=1200,height=800')}
         onOpenSettings={(tab) => {
           setSettingsTab(tab || 'serial');
           setIsSettingsOpen(true);

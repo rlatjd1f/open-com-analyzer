@@ -3,7 +3,8 @@ import type { AppTheme } from '../types';
 
 interface MenuBarProps {
   theme: AppTheme;
-  onOpenSettings: (initialTab?: 'serial' | 'tcp' | 'virtual') => void;
+  onNewWindow: () => void;
+  onOpenSettings: (initialTab?: 'serial' | 'tcp' | 'virtual' | 'buffer') => void;
   onClearScreen: () => void;
   onSaveLog: () => void;
   onOpenLog: () => void;
@@ -17,6 +18,7 @@ interface MenuBarProps {
 
 export const MenuBar: React.FC<MenuBarProps> = ({
   theme,
+  onNewWindow,
   onOpenSettings,
   onClearScreen,
   onSaveLog,
@@ -48,11 +50,13 @@ export const MenuBar: React.FC<MenuBarProps> = ({
       id: 'file',
       label: '파일',
       options: [
+        { label: '새 창 열기 (New Window)', shortcut: 'Cmd+N', action: onNewWindow },
+        { type: 'separator', divider: true },
         { label: '패킷 로그 저장 (.txt)', action: onSaveLog },
         { label: 'CSV 데이터 내보내기 (.csv)', action: onExportCsv },
         { label: '로그 파일 열기...', action: onOpenLog },
         { divider: true },
-        { label: '화면 버퍼 초기화', action: onClearScreen }
+        { label: '화면 버퍼 초기화', shortcut: 'Cmd+K', action: onClearScreen }
       ]
     },
     {

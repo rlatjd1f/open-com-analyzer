@@ -8,73 +8,87 @@ const { calculateSumCheck8, calculateSumCheck16, calculateCrc16Modbus, calculate
 const PORT = 4001;
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ name: 'COM Analyzer macOS Server', status: 'running' }));
+  res.end(JSON.stringify({ name: 'COM Analyzer Backend Server', status: 'running' }));
 });
 
 const wss = new WebSocketServer({ server });
 
-// Shared connection states
-let activeService = null; // 'serial' | 'tcp' | 'virtual'
-let currentConnectionInfo = {
-  connected: false,
-  type: null,
-  info: '연결되지 않음'
-};
-
-function broadcast(msg) {
-  const payload = JSON.stringify(msg);
-  for (const client of wss.clients) {
-    if (client.readyState === 1) { // OPEN
-      client.send(payload);
-    }
-  }
-}
-
-// Data callback
-function handleIncomingData(buffer, direction, source) {
-  // Convert buffer to hex array and ascii string
-  const bytes = Array.from(buffer);
-  const hex = buffer.toString('hex').toUpperCase();
-  const ascii = buffer.toString('utf-8');
-
-  broadcast({
-    type: 'DATA_PACKET',
-    direction, // 'rx' | 'tx'
-    source,
-    timestamp: Date.now(),
-    bytes,
-    hex,
-    ascii,
-    length: bytes.length
-  });
-}
-
-// Status callback
-function handleStatusChange(status) {
-  currentConnectionInfo = status;
-  broadcast({
-    type: 'STATUS_UPDATE',
-    status
-  });
-}
-
-const serialService = new SerialService(handleIncomingData, handleStatusChange);
-const tcpService = new TcpService(handleIncomingData, handleStatusChange);
-const virtualDevice = new VirtualDevice(handleIncomingData, handleStatusChange);
-
 wss.on('connection', async (ws) => {
-  // Send current status immediately
+  // Per-window connection state & services
+  let activeService = null; // 'serial' | 'tcp' | 'virtual'
+  let connectionStatus = {
+    connected: false,
+    type: null,
+    info: '연결되지 않음'
+  };
+
+  // Dedicated data callback for this specific window
+  const handleIncomingData = (buffer, direction, source) => {
+    if (ws.readyState !== 1) return; // ws.OPEN
+    const bytes = Array.from(buffer);
+    const hex = buffer.toString('hex').toUpperCase();
+    const ascii = buffer.toString('utf-8');
+
+    ws.send(JSON.stringify({
+      type: 'DATA_PACKET',
+      direction,
+      source,
+      timestamp: Date.now(),
+      bytes,
+      hex,
+      ascii,
+      length: bytes.length
+    }));
+  };
+
+  // Dedicated status callback for this specific window
+  const handleStatusChange = (status) => {
+    connectionStatus = status;
+    if (ws.readyState === 1) {
+      ws.send(JSON.stringify({
+        type: 'STATUS_UPDATE',
+        status
+      }));
+    }
+  };
+
+  // Independent service instances per window
+  const serialService = new SerialService(handleIncomingData, handleStatusChange);
+  const tcpService = new TcpService(handleIncomingData, handleStatusChange);
+  const virtualDevice = new VirtualDevice(handleIncomingData, handleStatusChange);
+
+  const closeAll = async () => {
+    try {
+      if (activeService === 'serial') {
+        await serialService.close();
+      } else if (activeService === 'tcp') {
+        await tcpService.close();
+      } else if (activeService === 'virtual') {
+        virtualDevice.stop();
+      }
+    } catch (err) {
+      console.warn('Error during service cleanup:', err);
+    } finally {
+      activeService = null;
+    }
+  };
+
+  // Send initial status
   ws.send(JSON.stringify({
     type: 'STATUS_UPDATE',
-    status: currentConnectionInfo
+    status: connectionStatus
   }));
 
   // Send available serial ports
-  const ports = await serialService.listPorts();
-  ws.send(JSON.stringify({
-    type: 'PORT_LIST',
-    ports
-  }));
+  try {
+    const ports = await serialService.listPorts();
+    ws.send(JSON.stringify({
+      type: 'PORT_LIST',
+      ports
+    }));
+  } catch (e) {
+    console.warn('Failed to list initial ports:', e);
+  }
 
   ws.on('message', async (data) => {
     try {
@@ -133,10 +147,9 @@ wss.on('connection', async (ws) => {
         }
 
         case 'SEND_DATA': {
-          const { raw, format } = msg; // format: 'hex' | 'ascii'
+          const { raw, format } = msg;
           let buf;
           if (format === 'hex') {
-            // Remove spaces, sanitize hex string
             const cleanHex = (raw || '').replace(/[^0-9a-fA-F]/g, '');
             if (cleanHex.length % 2 !== 0) {
               ws.send(JSON.stringify({ type: 'ERROR', message: 'HEX 길이가 짝수가 아닙니다.' }));
@@ -147,9 +160,7 @@ wss.on('connection', async (ws) => {
             buf = Buffer.from(raw || '', 'utf-8');
           }
 
-          if (buf.length === 0) {
-            return;
-          }
+          if (buf.length === 0) return;
 
           if (activeService === 'serial' && serialService.isOpen()) {
             await serialService.write(buf);
@@ -164,7 +175,6 @@ wss.on('connection', async (ws) => {
         }
 
         case 'CALCULATE': {
-          // Calculator request
           const { calcType, input, format } = msg;
           let buf;
           if (format === 'hex') {
@@ -196,35 +206,21 @@ wss.on('connection', async (ws) => {
           ws.send(JSON.stringify({ type: 'CALC_RESULT', calcType, result }));
           break;
         }
-
-        default:
-          console.warn('Unknown action:', msg.action);
       }
     } catch (err) {
-      console.error('WebSocket message handling error:', err);
+      console.error('Error handling WebSocket message:', err);
       ws.send(JSON.stringify({ type: 'ERROR', message: err.message }));
     }
   });
-});
 
-async function closeAll() {
-  if (serialService.isOpen()) {
-    await serialService.close();
-  }
-  if (tcpService.isServerRunning()) {
-    tcpService.stopServer();
-  }
-  if (tcpService.isClientConnected()) {
-    tcpService.disconnectClient();
-  }
-  if (virtualDevice.isRunning) {
-    virtualDevice.stop();
-  }
-  activeService = null;
-  currentConnectionInfo = { connected: false, info: '연결 종료됨' };
-  handleStatusChange(currentConnectionInfo);
-}
+  // When this window closes, release its hardware/socket connection cleanly
+  ws.on('close', () => {
+    closeAll();
+  });
+});
 
 server.listen(PORT, () => {
-  console.log(`COM Analyzer backend service running on http://localhost:${PORT}`);
+  console.log(`COM Analyzer WebSocket server running on http://localhost:${PORT}`);
 });
+
+module.exports = { server, wss };
