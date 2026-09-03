@@ -49,16 +49,55 @@ jobs:
           echo "" >> RELEASE_BODY.md
 
           if [ -n "$PREV_TAG" ]; then
-            echo "### 🔄 이전 버전($PREV_TAG) 이후 변경 내역" >> RELEASE_BODY.md
+            echo "### 🔄 이전 버전($PREV_TAG) 이후 주요 작업 및 변경 내역" >> RELEASE_BODY.md
             echo "" >> RELEASE_BODY.md
-            git log "$PREV_TAG..${{ github.ref_name }}" --pretty=format:"* %s (%h)" --no-merges >> RELEASE_BODY.md
-            echo "" >> RELEASE_BODY.md
-            echo "" >> RELEASE_BODY.md
-            echo "**전체 커밋 비교**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> RELEASE_BODY.md
           else
             echo "### 🚀 초기 릴리즈 내역" >> RELEASE_BODY.md
             echo "" >> RELEASE_BODY.md
-            git log --pretty=format:"* %s (%h)" --no-merges >> RELEASE_BODY.md
+          fi
+
+          python3 -c "
+          import subprocess, sys
+
+          prev_tag = '$PREV_TAG'
+          cur_tag = '${{ github.ref_name }}'
+
+          range_str = f'{prev_tag}..{cur_tag}' if prev_tag else cur_tag
+          cmd = ['git', 'log', range_str, '--no-merges', '--pretty=format:COMMIT_SEP%h|%s%n%b']
+          try:
+              output = subprocess.check_output(cmd, text=True)
+              entries = []
+              for block in output.strip().split('COMMIT_SEP'):
+                  if not block.strip():
+                      continue
+                  lines = block.strip().split('\n')
+                  header = lines[0]
+                  body = '\n'.join(lines[1:]).strip()
+                  if '|' in header:
+                      hash_val, subject = header.split('|', 1)
+                      if subject.startswith('chore: release'):
+                          continue
+                      entries.append((hash_val, subject, body))
+
+              with open('RELEASE_BODY.md', 'a', encoding='utf-8') as f:
+                  for hash_val, subject, body in entries:
+                      f.write(f'* **{subject}** (\`{hash_val}\`)\n')
+                      if body:
+                          for b_line in body.split('\n'):
+                              b_line = b_line.strip()
+                              if b_line:
+                                  if b_line.startswith('-') or b_line.startswith('*'):
+                                      f.write(f'  {b_line}\n')
+                                  else:
+                                      f.write(f'  - {b_line}\n')
+                      f.write('\n')
+          except Exception as e:
+              print(f'Error formatting log: {e}')
+          "
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> RELEASE_BODY.md
+            echo "**전체 커밋 비교**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> RELEASE_BODY.md
           fi
 
           echo "" >> RELEASE_BODY.md
