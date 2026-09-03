@@ -55,6 +55,12 @@ function createWindow() {
     win.loadFile(path.join(__dirname, '../dist/index.html'));
   });
 
+  // Intercept window.open() to create standard configured BrowserWindow
+  win.webContents.setWindowOpenHandler(() => {
+    createWindow();
+    return { action: 'deny' };
+  });
+
   win.on('closed', () => {
     windows.delete(win);
   });
