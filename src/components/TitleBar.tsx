@@ -1,12 +1,13 @@
 import React from 'react';
 import type { ConnectionStatus, AppTheme } from '../types';
-import { Moon, Sun, Monitor, Settings } from 'lucide-react';
+import { Moon, Sun, Monitor, Settings, CopyPlus } from 'lucide-react';
 
 interface TitleBarProps {
   status: ConnectionStatus;
   theme: AppTheme;
   onThemeChange: (theme: AppTheme['name']) => void;
   onOpenSettings: () => void;
+  onNewWindow: () => void;
   rxCount: number;
   txCount: number;
 }
@@ -16,6 +17,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   theme,
   onThemeChange,
   onOpenSettings,
+  onNewWindow,
   rxCount,
   txCount
 }) => {
@@ -32,7 +34,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
       titleText = `COM ANALYZER , ${status.info} - Analyzer`;
     }
   } else {
-    titleText = 'COM ANALYZER - Mac Analyzer (연결 대기중)';
+    titleText = 'COM ANALYZER - Analyzer (연결 대기중)';
   }
 
   const isRetro = theme.name === 'classic-retro';
@@ -61,12 +63,10 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         <div className="flex items-center gap-1.5">
           <span
             className={`w-2 h-2 rounded-full ${
-              status.connected
-                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]'
-                : 'bg-zinc-400'
+              status.connected ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]' : 'bg-zinc-400'
             }`}
           />
-          <span className="font-mono text-[11px] opacity-80">
+          <span className="font-mono text-[11px] font-semibold">
             {status.connected ? 'ONLINE' : 'OFFLINE'}
           </span>
         </div>
@@ -79,11 +79,26 @@ export const TitleBar: React.FC<TitleBarProps> = ({
         </span>
       </div>
 
-      {/* Right: Theme Switcher & Settings Quick Action */}
+      {/* Right: New Window, Theme Switcher & Settings Quick Action */}
       <div
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         className="flex items-center gap-1"
       >
+        {/* New Window Button */}
+        <button
+          onClick={onNewWindow}
+          className={`p-1.5 rounded transition-all flex items-center gap-1 text-[11px] font-medium ${
+            isRetro
+              ? 'border border-[#808080] bg-[#e0ded8] active:bg-[#c0beb8]'
+              : 'hover:bg-zinc-500/10 active:scale-95 text-emerald-500 dark:text-emerald-400'
+          }`}
+          title="새 창 열기 (Cmd + N)"
+        >
+          <CopyPlus size={13} />
+          <span className="hidden sm:inline">새 창</span>
+        </button>
+
+        {/* Theme Switcher */}
         <button
           onClick={() => {
             if (theme.name === 'modern-dark') onThemeChange('modern-light');
@@ -105,6 +120,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
           </span>
         </button>
 
+        {/* Settings Button */}
         <button
           onClick={onOpenSettings}
           className={`p-1.5 rounded flex items-center gap-1 text-[11px] ${
@@ -112,7 +128,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               ? 'border border-[#808080] bg-[#e0ded8] active:bg-[#c0beb8]'
               : 'hover:bg-zinc-500/10 active:scale-95 text-indigo-400'
           }`}
-          title="통신 및 포트 설정"
+          title="통신 및 포트 설정 (Cmd + ,)"
         >
           <Settings size={13} />
           <span className="hidden sm:inline">설정</span>

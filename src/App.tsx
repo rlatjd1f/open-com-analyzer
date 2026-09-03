@@ -389,6 +389,7 @@ export const App: React.FC = () => {
           setSettingsTab('serial');
           setIsSettingsOpen(true);
         }}
+        onNewWindow={() => window.open(window.location.href, '_blank', 'width=1200,height=800')}
         rxCount={rxCount}
         txCount={txCount}
       />
