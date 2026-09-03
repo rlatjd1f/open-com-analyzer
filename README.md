@@ -34,9 +34,16 @@
 ---
 
 ### 3. 모던 다크 테마 (Modern Dark Theme)
-> 고대비 딥 네이비/블랙 모던 다크 테마입니다.
+> 야간 및 장시간 분석 시 눈의 피로도를 낮추는 고대비 다크 테마입니다.
 
 ![Modern Dark Theme](assets/screenshots/dark-theme.png)
+
+---
+
+### 4. 모던 라이트 테마 (Modern Light Theme)
+> 밝고 선명한 화이트/그레이 톤의 모던 라이트 테마입니다.
+
+![Modern Light Theme](assets/screenshots/light-theme.png)
 
 ---
 
