@@ -134,6 +134,25 @@ npm run install:app
 
 ---
 
+## 💡 macOS 설치 및 실행 시 주의사항 (Gatekeeper)
+
+macOS는 인터넷(GitHub/Chrome)에서 다운로드한 미인증 오픈소스 앱에 대해 **`‘COM Analyzer’은(는) 손상되었기 때문에 열 수 없습니다.`**라는 보안 경고를 띄웁니다.
+
+아래 방법 중 하나로 **격리 속성을 해제**하면 즉시 정상 실행됩니다:
+
+1. **터미널에서 격리 속성 해제 (가장 추천)**:
+   ```bash
+   # 다운로드 폴더에 있는 경우
+   xattr -cr ~/Downloads/COM\ Analyzer.app
+
+   # 응용 프로그램 폴더에 넣은 경우
+   xattr -cr "/Applications/COM Analyzer.app"
+   ```
+2. **또는 마우스 우클릭으로 열기**:
+   - `COM Analyzer.app` 아이콘을 **`Control + 클릭` (또는 마우스 우클릭)** → **`열기(Open)`** 클릭 → 팝업에서 **`열기`** 선택
+
+---
+
 ## 📄 라이선스 (License)
 
 This project is licensed under the **MIT License**.

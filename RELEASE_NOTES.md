@@ -42,3 +42,12 @@
 * **macOS (Apple Silicon M1/M2/M3/M4)**: `COM-Analyzer-macOS-arm64.zip`
 * **macOS (Intel Core i5/i7/i9)**: `COM-Analyzer-macOS-x64.zip`
 * **Windows (64-bit)**: `COM-Analyzer-Windows-x64.zip`
+
+---
+
+### 💡 macOS 실행 시 "손상되었기 때문에 열 수 없습니다" 해결 방법
+인터넷(브라우저)에서 다운로드한 오픈소스 앱에 대해 macOS Gatekeeper가 격리 속성을 부여하여 발생하는 안내입니다. 터미널에서 아래 명령어를 1회 실행하시면 즉시 정상 실행됩니다:
+```bash
+xattr -cr ~/Downloads/COM\ Analyzer.app
+```
+(또는 앱 아이콘을 **마우스 우클릭(Control+클릭) → '열기'** 선택)
