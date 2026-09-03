@@ -9,7 +9,7 @@ def main():
     cmd = ["git", "log", range_str, "--no-merges", "--pretty=format:COMMIT_SEP%h|%s%n%b"]
 
     try:
-        output = subprocess.check_output(cmd, text=True)
+        output = subprocess.check_output(cmd, text=True, encoding='utf-8', errors='replace')
         entries = []
         for block in output.strip().split("COMMIT_SEP"):
             if not block.strip():
@@ -22,6 +22,22 @@ def main():
                 if subject.startswith("chore: release"):
                     continue
                 entries.append((hash_val, subject, body))
+
+        if not entries and prev_tag:
+            # Fallback if range produced nothing
+            fallback_cmd = ["git", "log", "-n", "15", "--no-merges", "--pretty=format:COMMIT_SEP%h|%s%n%b"]
+            fb_output = subprocess.check_output(fallback_cmd, text=True, encoding='utf-8', errors='replace')
+            for block in fb_output.strip().split("COMMIT_SEP"):
+                if not block.strip():
+                    continue
+                lines = block.strip().split("\n")
+                header = lines[0]
+                body = "\n".join(lines[1:]).strip()
+                if "|" in header:
+                    hash_val, subject = header.split("|", 1)
+                    if subject.startswith("chore: release"):
+                        continue
+                    entries.append((hash_val, subject, body))
 
         with open("RELEASE_BODY.md", "a", encoding="utf-8") as f:
             for hash_val, subject, body in entries:
