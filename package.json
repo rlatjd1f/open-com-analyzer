@@ -1,0 +1,41 @@
+{
+  "name": "com-analyzer",
+  "productName": "COM Analyzer",
+  "private": true,
+  "version": "1.0.0",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "server": "node server/index.cjs",
+    "start": "concurrently -k \"npm run server\" \"npm run dev\"",
+    "desktop": "npm run build && electron electron/main.cjs",
+    "build": "tsc -b && vite build",
+    "package:mac": "npm run build && electron-packager . \"COM Analyzer\" --platform=darwin --arch=arm64 --icon=assets/icon --app-bundle-id=\"com.analyzer.comanalyzer\" --app-version=\"1.0.0\" --build-version=\"1.0.0\" --out=dist-app --overwrite",
+    "install:app": "npm run package:mac && rm -rf \"/Applications/COM Analyzer.app\" && cp -R \"dist-app/COM Analyzer-darwin-arm64/COM Analyzer.app\" /Applications/",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "lucide-react": "^1.39.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "serialport": "^13.0.0",
+    "tailwindcss": "^4.3.3",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^6.1.0",
+    "concurrently": "^10.0.5",
+    "electron": "^44.1.1",
+    "oxlint": "^1.79.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  }
+}

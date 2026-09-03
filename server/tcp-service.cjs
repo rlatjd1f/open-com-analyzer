@@ -1,0 +1,182 @@
+const net = require('net');
+
+class TcpService {
+  constructor(onData, onStatusChange) {
+    this.server = null;
+    this.clientSocket = null;
+    this.serverClients = new Set();
+    this.onData = onData;
+    this.onStatusChange = onStatusChange;
+    this.mode = null; // 'server' | 'client'
+    this.config = null;
+  }
+
+  isServerRunning() {
+    return Boolean(this.server && this.server.listening);
+  }
+
+  isClientConnected() {
+    return Boolean(this.clientSocket && !this.clientSocket.destroyed);
+  }
+
+  // --- TCP Server Mode ---
+  startServer(port = 121) {
+    return new Promise((resolve, reject) => {
+      if (this.isServerRunning()) {
+        this.stopServer();
+      }
+
+      try {
+        this.server = net.createServer((socket) => {
+          this.serverClients.add(socket);
+          const remoteAddr = `${socket.remoteAddress}:${socket.remotePort}`;
+
+          this._emitStatus({
+            type: 'tcp-server',
+            connected: true,
+            port: port,
+            clientCount: this.serverClients.size,
+            info: `TCP Server PORT:${port}, 접속자 수:${this.serverClients.size}`
+          });
+
+          socket.on('data', (chunk) => {
+            if (this.onData) {
+              this.onData(chunk, 'rx', `tcp-server (${remoteAddr})`);
+            }
+          });
+
+          socket.on('close', () => {
+            this.serverClients.delete(socket);
+            this._emitStatus({
+              type: 'tcp-server',
+              connected: true,
+              port: port,
+              clientCount: this.serverClients.size,
+              info: `TCP Server PORT:${port}, 접속자 수:${this.serverClients.size}`
+            });
+          });
+
+          socket.on('error', (err) => {
+            console.error(`Socket error from ${remoteAddr}:`, err.message);
+          });
+        });
+
+        this.server.on('error', (err) => {
+          console.error('TCP Server error:', err);
+          this._emitStatus({ connected: false, error: err.message });
+          reject(err);
+        });
+
+        this.server.listen(port, '0.0.0.0', () => {
+          this.mode = 'server';
+          this.config = { port };
+          this._emitStatus({
+            type: 'tcp-server',
+            connected: true,
+            port: port,
+            clientCount: 0,
+            info: `TCP Server PORT:${port}, 접속자 수:0`
+          });
+          resolve(true);
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  stopServer() {
+    if (this.server) {
+      for (const client of this.serverClients) {
+        try { client.destroy(); } catch (e) {}
+      }
+      this.serverClients.clear();
+      this.server.close(() => {
+        this.server = null;
+        this.mode = null;
+        this._emitStatus({ connected: false, info: 'TCP Server stopped' });
+      });
+    }
+  }
+
+  // --- TCP Client Mode ---
+  connectClient(host = '127.0.0.1', port = 121) {
+    return new Promise((resolve, reject) => {
+      if (this.isClientConnected()) {
+        this.disconnectClient();
+      }
+
+      this.clientSocket = new net.Socket();
+
+      this.clientSocket.connect(port, host, () => {
+        this.mode = 'client';
+        this.config = { host, port };
+        this._emitStatus({
+          type: 'tcp-client',
+          connected: true,
+          info: `Connected to TCP ${host}:${port}`
+        });
+        resolve(true);
+      });
+
+      this.clientSocket.on('data', (chunk) => {
+        if (this.onData) {
+          this.onData(chunk, 'rx', 'tcp-client');
+        }
+      });
+
+      this.clientSocket.on('close', () => {
+        this.clientSocket = null;
+        this.mode = null;
+        this._emitStatus({ connected: false, info: 'TCP Client disconnected' });
+      });
+
+      this.clientSocket.on('error', (err) => {
+        this._emitStatus({ connected: false, error: err.message });
+        reject(err);
+      });
+    });
+  }
+
+  disconnectClient() {
+    if (this.clientSocket) {
+      this.clientSocket.destroy();
+      this.clientSocket = null;
+      this.mode = null;
+      this._emitStatus({ connected: false, info: 'Disconnected' });
+    }
+  }
+
+  // --- Send Data ---
+  async write(buffer) {
+    if (this.mode === 'server') {
+      if (this.serverClients.size === 0) {
+        throw new Error('No TCP clients connected to server');
+      }
+      for (const client of this.serverClients) {
+        client.write(buffer);
+      }
+      if (this.onData) {
+        this.onData(buffer, 'tx', 'tcp-server');
+      }
+    } else if (this.mode === 'client') {
+      if (!this.isClientConnected()) {
+        throw new Error('TCP client is not connected');
+      }
+      this.clientSocket.write(buffer);
+      if (this.onData) {
+        this.onData(buffer, 'tx', 'tcp-client');
+      }
+    } else {
+      throw new Error('TCP service is not running');
+    }
+  }
+
+  _emitStatus(status) {
+    if (this.onStatusChange) {
+      this.onStatusChange(status);
+    }
+  }
+}
+
+module.exports = TcpService;
