@@ -609,6 +609,8 @@ export const App: React.FC = () => {
           onTxModeChange={setTxMode}
           theme={theme}
           onPrint={handlePrint}
+          onSave={handleSaveLog}
+          onOpen={handleOpenLog}
           status={status}
           onStartTcpServer={handleStartTcpServer}
           onConnectTcpClient={handleConnectTcpClient}

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { AppTheme, ConnectionStatus } from '../types';
-import { Printer, ArrowDown, Trash2, Server, Power } from 'lucide-react';
+import { Printer, ArrowDown, Trash2, Server, Power, Save, FolderOpen } from 'lucide-react';
 
 interface ControlSidebarProps {
   totalBytesCount: number;
@@ -18,6 +18,8 @@ interface ControlSidebarProps {
   onTxModeChange: (mode: 'ascii' | 'binary') => void;
   theme: AppTheme;
   onPrint: () => void;
+  onSave?: () => void;
+  onOpen?: () => void;
   status: ConnectionStatus;
   onStartTcpServer: (port: number) => void;
   onConnectTcpClient: (host: string, port: number) => void;
@@ -40,6 +42,8 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
   onTxModeChange,
   theme,
   onPrint,
+  onSave,
+  onOpen,
   status,
   onStartTcpServer,
   onConnectTcpClient,
@@ -377,7 +381,7 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
       <div className="flex flex-col gap-1 pt-1 mt-auto">
         <button
           onClick={onPrint}
-          className={`w-full py-1.5 rounded flex items-center justify-center gap-1 font-medium text-[11px] transition-all ${
+          className={`w-full py-1.5 rounded flex items-center justify-center gap-1.5 font-medium text-[11px] transition-all ${
             isRetro
               ? 'border border-[#808080] bg-[#d4d0c8] active:bg-[#b0aca4]'
               : 'hover:bg-zinc-700/40 border border-zinc-700/60 text-zinc-300'
@@ -387,6 +391,36 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
           <Printer size={12} />
           <span>화면 인쇄</span>
         </button>
+
+        {onSave && (
+          <button
+            onClick={onSave}
+            className={`w-full py-1.5 rounded flex items-center justify-center gap-1.5 font-medium text-[11px] transition-all ${
+              isRetro
+                ? 'border border-[#808080] bg-[#d4d0c8] active:bg-[#b0aca4]'
+                : 'hover:bg-zinc-700/40 border border-zinc-700/60 text-zinc-300'
+            }`}
+            title="패킷 로그 파일(.txt) 저장"
+          >
+            <Save size={12} />
+            <span>로그 저장</span>
+          </button>
+        )}
+
+        {onOpen && (
+          <button
+            onClick={onOpen}
+            className={`w-full py-1.5 rounded flex items-center justify-center gap-1.5 font-medium text-[11px] transition-all ${
+              isRetro
+                ? 'border border-[#808080] bg-[#d4d0c8] active:bg-[#b0aca4]'
+                : 'hover:bg-zinc-700/40 border border-zinc-700/60 text-zinc-300'
+            }`}
+            title="외부 로그 파일(.txt, .hex, .bin) 불러오기"
+          >
+            <FolderOpen size={12} />
+            <span>로그 열기</span>
+          </button>
+        )}
       </div>
     </div>
   );
