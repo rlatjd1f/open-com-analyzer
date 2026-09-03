@@ -49,10 +49,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [parity, setParity] = useState<'none' | 'even' | 'odd' | 'mark' | 'space'>('none');
   const [rtscts, setRtscts] = useState(false);
 
-  // TCP Form State
+  // TCP Form State (Default empty, remembered in localStorage)
   const [tcpMode, setTcpMode] = useState<'server' | 'client'>('server');
-  const [tcpPort, setTcpPort] = useState(121); // Default 121 matching COM Analyzer standard
-  const [tcpHost, setTcpHost] = useState('127.0.0.1');
+  const [tcpPort, setTcpPort] = useState<string>(() => {
+    try {
+      return localStorage.getItem('com_analyzer_last_tcp_port') || '';
+    } catch (e) {
+      return '';
+    }
+  });
+  const [tcpHost, setTcpHost] = useState<string>(() => {
+    try {
+      return localStorage.getItem('com_analyzer_last_tcp_host') || '127.0.0.1';
+    } catch (e) {
+      return '127.0.0.1';
+    }
+  });
 
   // Virtual Device State
   const [virtualMode, setVirtualMode] = useState<'echo' | 'modbus' | 'stream'>('modbus');
@@ -101,10 +113,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const handleTcpAction = () => {
+    const portNum = parseInt(tcpPort, 10);
+    if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+      alert('포트 번호를 입력해주세요 (예: 121).');
+      return;
+    }
+    try {
+      localStorage.setItem('com_analyzer_last_tcp_port', tcpPort);
+      localStorage.setItem('com_analyzer_last_tcp_host', tcpHost);
+    } catch (e) {}
+
     if (tcpMode === 'server') {
-      onStartTcpServer(tcpPort);
+      onStartTcpServer(portNum);
     } else {
-      onConnectTcpClient(tcpHost, tcpPort);
+      if (!tcpHost.trim()) {
+        alert('접속할 서버 IP 주소를 입력해주세요 (예: 127.0.0.1).');
+        return;
+      }
+      onConnectTcpClient(tcpHost.trim(), portNum);
     }
     onClose();
   };
@@ -396,7 +422,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <input
                     type="number"
                     value={tcpPort}
-                    onChange={(e) => setTcpPort(Number(e.target.value))}
+                    onChange={(e) => setTcpPort(e.target.value)}
+                    placeholder="예: 121"
                     className={`w-full p-2 border rounded font-mono text-xs ${
                       isRetro
                         ? 'bg-white border-[#808080] text-black'
@@ -406,7 +433,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }`}
                   />
                   <span className="text-[11px] opacity-70 mt-1 block">
-                    * 기본 포트: <b>121</b> (오리지널 COM Analyzer 표준 포트)
+                    * 비워둘 경우 필요 시 입력 (마지막 입력 포트 번호 자동 기억)
                   </span>
                 </div>
               </div>

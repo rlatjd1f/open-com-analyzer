@@ -45,10 +45,22 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
   onConnectTcpClient,
   onDisconnect
 }) => {
-  // Quick TCP settings local state
+  // Quick TCP settings local state (Default empty, remembered in localStorage)
   const [quickTcpMode, setQuickTcpMode] = useState<'server' | 'client'>('server');
-  const [quickTcpPort, setQuickTcpPort] = useState(121);
-  const [quickTcpHost, setQuickTcpHost] = useState('127.0.0.1');
+  const [quickTcpPort, setQuickTcpPort] = useState<string>(() => {
+    try {
+      return localStorage.getItem('com_analyzer_last_tcp_port') || '';
+    } catch (e) {
+      return '';
+    }
+  });
+  const [quickTcpHost, setQuickTcpHost] = useState<string>(() => {
+    try {
+      return localStorage.getItem('com_analyzer_last_tcp_host') || '127.0.0.1';
+    } catch (e) {
+      return '127.0.0.1';
+    }
+  });
 
   const isRetro = theme.name === 'classic-retro';
   const isDark = theme.name === 'modern-dark';
@@ -59,10 +71,24 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
     if (status.connected) {
       onDisconnect();
     } else {
+      const portNum = parseInt(quickTcpPort, 10);
+      if (isNaN(portNum) || portNum <= 0 || portNum > 65535) {
+        alert('포트 번호를 입력해주세요 (예: 121).');
+        return;
+      }
+      try {
+        localStorage.setItem('com_analyzer_last_tcp_port', quickTcpPort);
+        localStorage.setItem('com_analyzer_last_tcp_host', quickTcpHost);
+      } catch (e) {}
+
       if (quickTcpMode === 'server') {
-        onStartTcpServer(quickTcpPort);
+        onStartTcpServer(portNum);
       } else {
-        onConnectTcpClient(quickTcpHost, quickTcpPort);
+        if (!quickTcpHost.trim()) {
+          alert('접속할 IP 주소를 입력해주세요 (예: 127.0.0.1).');
+          return;
+        }
+        onConnectTcpClient(quickTcpHost.trim(), portNum);
       }
     }
   };
@@ -189,7 +215,8 @@ export const ControlSidebar: React.FC<ControlSidebarProps> = ({
             <input
               type="number"
               value={quickTcpPort}
-              onChange={(e) => setQuickTcpPort(Number(e.target.value))}
+              onChange={(e) => setQuickTcpPort(e.target.value)}
+              placeholder="예: 121"
               className={`w-16 h-6 px-1.5 text-right font-mono text-[11px] font-bold rounded border outline-none ${
                 isRetro
                   ? 'bg-white text-black border-[#808080]'
