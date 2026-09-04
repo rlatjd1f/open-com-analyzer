@@ -1,48 +1,50 @@
-## ⚡️ Open COM Analyzer v0.0.6
+## ⚡️ Open COM Analyzer v0.0.8
 
-### 🔄 이전 버전(v0.0.5) 이후 주요 작업 및 변경 내역
+이번 릴리즈에서는 산업 표준 **Modbus 및 커스텀 프레임을 원클릭으로 손쉽게 조립할 수 있는 강력한 패킷 생성기(Packet Builder)** 와 **공학용 실시간 다중 진수 변환기**가 새롭게 탑재되었으며, 장시간 대량 패킷 스트리밍 시의 스크롤 고정 문제 및 즐겨찾기 편의성이 대폭 개선되었습니다.
 
-* **feat: set default application theme to modern-light** (`69631f3`)
-  - 애플리케이션 초기 기본 테마를 Modern Light(라이트 테마)로 설정
-  - 사용자가 설정창 또는 상단 타이틀바에서 변경한 테마는 localStorage에 영구 보존
+---
 
-* **feat: default TCP port to empty and persist last used port in localStorage** (`2988899`)
-  - TCP 포트 번호 기본값을 빈칸(placeholder: 예: 121)으로 설정
-  - 사용자가 포트 번호를 입력하여 사용한 이후에는 마지막으로 사용한 포트 번호를 localStorage에 자동 기억하여 복원
+### ✨ 주요 신규 기능 (New Features)
 
-* **fix: simplify TCP mode switcher button label by removing port text** (`206f957`)
-  - 우측 사이드바 TCP 간편 설정 모드 선택 버튼의 '서버 (Port 121)' 문구를 깔끔하게 '서버'로 변경
-  - 설정창 사이드바 설명 문구 간소화
+#### 1. 🛠️ 통합 패킷 생성기 (Packet Builder) 탑재
+하단 송신 패널의 **`[🛠️ 패킷 생성기]`** 버튼을 통해 마우스 클릭과 입력만으로 완성된 통신 패킷을 생성하고 전송할 수 있습니다.
 
-* **feat: add quick TCP control to sidebar and move color customizer to settings modal** (`6d0ab07`)
-  - 우측 사이드바의 색상 설정 영역을 설정창(SettingsModal) '테마 및 화면' 탭 내부로 이동
-  - 우측 사이드바에 'TCP 간편 설정' 패널(서버/클라이언트 모드 전환, PORT 121, 원클릭 구동/종료) 추가
-  - 상단 타이틀바의 RX/TX 카운터에 실시간 패킷 송수신 블링크 하이라이트 애니메이션 연동
+* **Modbus RTU / ASCII 마법사**:
+  * **📤 마스터 요청 (Request)**: 국번(Slave ID), 기능 코드(01~16), 시작 주소, 개수/설정값을 입력하면 CRC-16 Modbus를 자동 계산하여 패킷 완성
+  * **📥 슬레이브 응답 (Response)**:
+    * 수신 데이터 길이에 따른 바이트 수(`Byte Count`) 자동 계산 및 수동 지정 지원
+    * **원하는 레지스터 개수(1~125개)를 지정하여 4가지 패턴(순차 증가, 0으로 채우기, 랜덤, 고정값)으로 샘플 데이터를 0.1초 만에 자동 생성**
+    * 빠른 레지스터 개수 선택 칩: `[10개]`, `[20개]`, `[50개]`, `[125개 (최대)]` 지원
+  * **⚠️ 예외/에러 응답 (Exception)**: 기능 코드 `+0x80` 및 표준 4대 예외 코드(`01: Illegal Function`, `02: Illegal Address` 등) 자동 구성
+  * **기능 코드 한국어 설명**: 콤보박스 선택지마다 명확한 한국어 설명(예: `03 - Read Holding Registers (홀딩 레지스터 읽기 / 워드 데이터 조회)`) 제공
 
-* **feat: prioritize TCP socket settings as the top tab in SettingsModal** (`0c2d670`)
-  - 설정창(SettingsModal) 좌측 사이드바 메뉴 순서에서 'TCP 소켓 설정'을 가장 최상단으로 변경
-  - 설정창 기본 진입 탭 및 단축키 열기 시 기본 선택 탭을 TCP 소켓 설정으로 연동
+* **표준 프레임 (Custom Frame) 빌더**:
+  * **헤더 (Header)**: `0B(없음)`, `1B(STX 02 등)`, `2B(AA 55 등)`, `3B`, `4B` 바이트 수 지정 및 프리셋
+  * **페이로드 (Payload)**: 가변 길이(Auto) 또는 고정 바이트 수(2~16B) 지정, HEX/ASCII 지원
+  * **체크섬 / CRC 자동 계산**: `Sum-8`, `Sum-16`, `XOR/LRC`, `CRC-16 Modbus`, `CRC-16 CCITT`, `CRC-32` 지원 및 엔디안/계산 범위 선택
+  * **종료 (Tail)**: `0B`, `1B(ETX 03 등)`, `2B(CRLF 0D 0A 등)` 지정
 
-* **fix: adjust control sidebar layout to prevent buffer combobox overflow** (`f79fafd`)
-  - 우측 제어 사이드바의 버퍼 한도 콤보박스가 경계선을 벗어나 튀어나오던 레이아웃 버그 수정
-  - 사이드바 폭을 안정적으로 조정하고 버퍼 한도 선택창을 컨테이너 내 100% 폭으로 균형 있게 배치
+#### 2. 🧮 공학용 실시간 다중 진수 변환기 (Radix Converter)
+* 패킷 생성기 하단에 **16진수(HEX) / 10진수(DEC) / 8진수(OCT) / 2진수(BIN)** 동기화 변환기 내장
+* 어느 진수 칸에 값을 입력하더라도 나머지 3개 진수 자리에 변환된 값이 실시간으로 즉시 동기화
+* 2진수는 4비트 단위 띄어쓰기(`0000 1010`) 지원 및 각 진수별 **`[+ 패킷에 추가]`** 원클릭 삽입
 
-* **feat: streamline add-to-favorites flow with instant registration and inline alias focus** (`f451b82`)
-  - 입력창의 패킷을 즉시 즐겨찾기 목록 최상단에 등록하도록 흐름 개선
-  - 브라우저 기본 팝업(prompt) 제거 및 신규 등록된 항목에 인라인 별칭 입력창 자동 포커스
+---
 
-* **feat: add inline alias name editor for frequent and recent packets** (`eb817ef`)
-  - 자주 쓰는 패킷 및 최근 기록의 각 항목에 인라인 별칭(이름) 추가/수정 기능(연필 아이콘) 구현
-  - Enter 키로 즉시 저장 및 ESC 키로 취소 가능한 직관적인 별칭 편집 UI 제공
-  - 설정된 별칭을 localStorage에 영구 보관하여 패킷 목적을 한눈에 식별하고 재사용할 수 있도록 지원
+### 🛠 버그 수정 및 성능 최적화 (Bug Fixes & Improvements)
 
-* **feat: add frequent packets preset and recent history dropdown in send panel** (`290ac6a`)
-  - 보내는 데이터 버튼 우측에 '자주 쓰는 데이터' 팝오버 드롭다운 버튼 추가
-  - 최근 송신한 패킷(최대 20건)을 localStorage에 자동 기록하여 원클릭 입력창 채우기 및 즉시 전송 지원
-  - 산업 표준 Modbus RTU 읽기/쓰기 및 Ping 기본 프리셋 제공 및 사용자 정의 즐겨찾기(별표) 등록/삭제 기능 지원
+* **⚓️ 버퍼 포화 시 자동 스크롤 하단 앵커링 해결**:
+  * FIFO 링 버퍼 한도(예: 500줄, 1,000줄)에 도달하여 패킷 개수가 고정되었을 때, 자동 스크롤이 상단으로 밀려나던 현상을 `lastPacketId` 및 `useLayoutEffect` 앵커링으로 수정하여 **항상 최신 패킷(맨 아래)에 안정적으로 고정**
+* **🗑️ 즐겨찾기 패킷 목록 즉시 삭제(휴지통) 버튼 추가**:
+  * `[⭐️ 자주 쓰는 데이터]` 팝업의 즐겨찾기/프리셋 목록 각 항목에 휴지통 아이콘을 추가하여 불필요해진 항목을 원클릭으로 즉시 삭제 가능
+* **📌 패킷 생성기 팝업 상단 위치 고정 (Top Anchor)**:
+  * 탭 전환이나 모드 변경 시 팝업 창이 위아래로 출렁이지 않고, **상단 헤더 위치를 고정한 채 하단 방향으로만 깔끔하게 확장/축소**되도록 레이아웃 개선
+* **🌐 범용 오픈소스 표준 준수**:
+  * 특정 프로젝트 전용 명칭을 완전히 배제하고, 범용적인 통신 분석 도구 표준 명칭으로 리팩토링
 
+---
 
-**전체 커밋 비교**: https://github.com/rlatjd1f/open-com-analyzer/compare/v0.0.5...v0.0.6
+**전체 커밋 비교**: https://github.com/rlatjd1f/open-com-analyzer/compare/v0.0.7...v0.0.8
 
 ---
 ### 📦 다운로드 파일 (Assets)
