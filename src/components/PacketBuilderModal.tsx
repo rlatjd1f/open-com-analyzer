@@ -661,12 +661,12 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                       />
                     )}
                     <div className="flex gap-1.5 mt-2">
-                      {[1, 2, 8, 10, 20].map((q) => (
+                      {[10, 20, 50, 125].map((q) => (
                         <button
                           key={q}
                           type="button"
                           onClick={() => (functionCode === 5 || functionCode === 6 ? setSingleValue(q) : setQuantity(q))}
-                          className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10 font-mono"
+                          className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10 font-mono font-semibold"
                         >
                           {q}개
                         </button>
@@ -739,14 +739,17 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                               min={1}
                               max={functionCode === 1 || functionCode === 2 ? 2000 : 125}
                               value={sampleRegisterCount}
-                              onChange={(e) => setSampleRegisterCount(Math.max(1, Math.min(2000, parseInt(e.target.value) || 1)))}
+                              onChange={(e) => {
+                                const maxLimit = functionCode === 1 || functionCode === 2 ? 2000 : 125;
+                                setSampleRegisterCount(Math.max(1, Math.min(maxLimit, parseInt(e.target.value) || 1)));
+                              }}
                               className="w-14 p-1 border rounded font-mono text-xs text-center bg-transparent font-bold"
                             />
                             <span className="opacity-60 text-[11px]">개</span>
                           </div>
 
                           <div className="flex items-center gap-1">
-                            {[5, 10, 20, 50, 80].map((cnt) => (
+                            {[10, 20, 50, 125].map((cnt) => (
                               <button
                                 key={cnt}
                                 type="button"
@@ -754,7 +757,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                                   setSampleRegisterCount(cnt);
                                   handleGenerateSampleData(cnt);
                                 }}
-                                className="px-1.5 py-0.5 rounded border text-[10px] font-mono hover:bg-zinc-500/10"
+                                className="px-2 py-0.5 rounded border text-[10px] font-mono hover:bg-zinc-500/10 font-semibold"
                               >
                                 {cnt}개
                               </button>
