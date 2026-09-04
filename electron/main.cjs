@@ -14,7 +14,7 @@ function writeCrashLog(type, error) {
     const timestamp = new Date().toISOString();
     const logHeader = `==================== [${type}] ${timestamp} ====================\n`;
     const envInfo = [
-      `App Version: ${app.isPackaged ? app.getVersion() : 'Dev-0.0.9'}`,
+      `App Version: ${app.isPackaged ? app.getVersion() : 'Dev-0.0.10'}`,
       `Electron: ${process.versions.electron}`,
       `Node: ${process.versions.node}`,
       `Platform: ${process.platform} (${process.arch})`,

@@ -1,25 +1,25 @@
-## ⚡️ Open COM Analyzer v0.0.9
+## ⚡️ Open COM Analyzer v0.0.10
 
-Open COM Analyzer v0.0.9 버전에서는 다른 PC 환경 및 멀티 인스턴스 환경에서의 실행 안정성을 대폭 개선하고, 예외 발생 시 원인을 즉각 파악할 수 있는 자동 크래시 로깅 시스템이 추가되었습니다.
+Open COM Analyzer v0.0.10 버전에서는 산업 표준 **Modbus TCP (이더넷 / MBAP)** 패킷 생성 마법사가 새롭게 탑재되었으며, Modbus RTU 모드의 CRC 선택성 및 시각화 블록 UI가 대폭 강화되었습니다.
 
 ---
 
 ### [✨ 신규 기능]
-* **다운로드 폴더 내 오류 로그 자동 저장 시스템 (`COM_Analyzer_error.log`)**
-  - 앱 시작 실패, 백엔드 연결 오류, 렌더러 비정상 종료 등 예외 상황 발생 시 사용자의 **`~/Downloads/COM_Analyzer_error.log`** 파일에 시간, 앱 버전, OS 및 CPU 아키텍처, 상세 스택 트레이스를 자동 기록합니다.
-  - 시스템 표준 로그 디렉터리(`~/Library/Logs/COM Analyzer/`)에도 함께 보관되어 장애 분석 및 버그 리포트 작성이 용이해졌습니다.
-* **네이티브 오류 안내 다이얼로그 제공**
-  - 오류 발생 시 앱이 조용히 꺼지는 대신, 원인과 로그 파일 저장 위치를 명확히 안내하는 시스템 팝업을 표시합니다.
+* **🌐 Modbus TCP 전용 패킷 생성 모드 탑재**
+  - **표준 7바이트 MBAP 헤더 자동 조립**: `트랜잭션 ID (2B)`, `프로토콜 ID 0000 (2B)`, `길이 (Length 2B 자동 계산)`, `Unit ID (1B)`를 실시간으로 자동 구성합니다.
+  - **트랜잭션 ID 간편 관리**: 트랜잭션 번호 직관 입력 및 `[+1 증가]` 버튼으로 손쉽게 연속 패킷을 생성할 수 있습니다.
+  - **3대 패킷 유형 완벽 지원**: `마스터 요청 (Request)`, `슬레이브 응답 (Response)`, `예외/에러 응답 (Exception)` 모두 Modbus TCP 규격에 맞게 100% 호환 생성됩니다.
+  - **TCP 링크 CRC 자동 생략**: TCP 프로토콜 계층에 맞춰 불필요한 후미 CRC 체크섬을 자동으로 생략합니다.
+* **🔌 Modbus RTU CRC-16 On/Off 토글 지원**
+  - `☑️ CRC-16 Modbus 자동 부착` 옵션을 추가하여, 체크 해제 시 CRC 없는 순수 PDU(Protocol Data Unit) 또는 특수 프레임도 손쉽게 생성할 수 있습니다.
 
 ---
 
-### [🛠 버그 수정 및 안정성 개선]
-* **포트 충돌(`EADDRINUSE`) 및 중복 프로세스 방지**
-  - **단일 인스턴스 락(Single Instance Lock)**: 앱 중복 실행 시 새 프로세스는 안전하게 종료되고 이미 켜져 있는 창으로 포커스 전환됩니다.
-  - **동적 백엔드 포트 할당**: 기본 `4001` 포트가 다른 로컬 서비스에 의해 점유 중인 경우 `4002` ~ `4010` 포트로 자동 폴백(Fallback) 리스닝합니다.
-  - **프론트엔드 자동 포트 스캔**: UI 클라이언트가 활성화된 백엔드 포트를 순차 탐색하여 자동으로 안정적인 웹소켓 연결을 구성합니다.
-* **CI/CD 릴리즈 워크플로우 보강**
-  - GitHub Actions 릴리즈 배포 시 에이전트가 직접 작성한 한국어 릴리즈 노트(`RELEASE_BODY.md`)가 온전히 반영되도록 파이프라인을 보강했습니다.
+### [🎨 UI/UX 편의성 향상]
+* **MBAP 실시간 시각화 블록 칩 (Visual Breakdown Chips)**
+  - 완성된 패킷 미리보기 영역에서 `[Trans]`, `[Proto]`, `[Len]`, `[Unit]`, `[FC]`, `[Addr/Data]` 필드를 색상별 블록 칩으로 명확히 구분하여 가독성을 극대화했습니다.
+* **즐겨찾기 라벨 프로토콜 자동 구분**
+  - 즐겨찾기 등록 시 `Modbus RTU FC03 요청` 및 `Modbus TCP FC03 응답` 등으로 프로토콜 명칭이 자동 세분화되어 저장됩니다.
 
 ---
 
@@ -38,4 +38,4 @@ xattr -cr "/Applications/COM Analyzer.app"
 xattr -cr ~/Downloads/"COM Analyzer.app"
 ```
 
-**전체 커밋 비교**: https://github.com/rlatjd1f/open-com-analyzer/compare/v0.0.8...v0.0.9
+**전체 커밋 비교**: https://github.com/rlatjd1f/open-com-analyzer/compare/v0.0.9...v0.0.10
