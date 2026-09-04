@@ -805,9 +805,9 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                               setRespDataHex('00F001F4000A003C001E00B4001E000A00320096009600050005000500FA00FA00140014000500050005000A00020003000300010001000200020002000100020001000F000F00320032015E000100070100000105F0030C026C00960082006E00500032010400D2000A001E002D00030009001A000500200000000100EB020800260073006C002B002900BA00B6000100DC001400DC0014000F0001000500F8');
                             }}
                             className="px-2 py-1 rounded border text-[11px] font-semibold hover:bg-zinc-500/10 text-amber-400"
-                            title="AR147 160B 모니터링 표준 패킷"
+                            title="80개 레지스터 (160바이트) 다중 데이터 샘플"
                           >
-                            AR147 160B(80개)
+                            80개 (160B) 샘플
                           </button>
                         </div>
                       </div>
