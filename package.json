@@ -2,7 +2,7 @@
   "name": "com-analyzer",
   "productName": "COM Analyzer",
   "private": true,
-  "version": "0.0.8",
+  "version": "0.0.9",
   "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
@@ -11,9 +11,9 @@
     "start": "concurrently -k \"npm run server\" \"npm run dev\"",
     "desktop": "npm run build && electron electron/main.cjs",
     "build": "tsc -b && vite build",
-    "package:mac": "npm run build && electron-packager . \"COM Analyzer\" --platform=darwin --arch=arm64,x64 --icon=assets/icon.icns --app-bundle-id=\"com.analyzer.comanalyzer\" --app-version=\"0.0.8\" --build-version=\"0.0.8\" --out=dist-app --overwrite",
-    "package:win": "npm run build && electron-packager . \"COM Analyzer\" --platform=win32 --arch=x64 --app-version=\"0.0.8\" --build-version=\"0.0.8\" --out=dist-app --overwrite",
-    "install:app": "npm run build && electron-packager . \"COM Analyzer\" --platform=darwin --arch=arm64 --icon=assets/icon.icns --app-bundle-id=\"com.analyzer.comanalyzer\" --app-version=\"0.0.8\" --build-version=\"0.0.8\" --out=dist-app --overwrite && rm -rf \"/Applications/COM Analyzer.app\" && cp -R \"dist-app/COM Analyzer-darwin-arm64/COM Analyzer.app\" /Applications/",
+    "package:mac": "npm run build && electron-packager . \"COM Analyzer\" --platform=darwin --arch=arm64,x64 --icon=assets/icon.icns --app-bundle-id=\"com.analyzer.comanalyzer\" --app-version=\"0.0.9\" --build-version=\"0.0.9\" --out=dist-app --overwrite",
+    "package:win": "npm run build && electron-packager . \"COM Analyzer\" --platform=win32 --arch=x64 --app-version=\"0.0.9\" --build-version=\"0.0.9\" --out=dist-app --overwrite",
+    "install:app": "npm run build && electron-packager . \"COM Analyzer\" --platform=darwin --arch=arm64 --icon=assets/icon.icns --app-bundle-id=\"com.analyzer.comanalyzer\" --app-version=\"0.0.9\" --build-version=\"0.0.9\" --out=dist-app --overwrite && rm -rf \"/Applications/COM Analyzer.app\" && cp -R \"dist-app/COM Analyzer-darwin-arm64/COM Analyzer.app\" /Applications/",
     "lint": "oxlint",
     "preview": "vite preview"
   },
