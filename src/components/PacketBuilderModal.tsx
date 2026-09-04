@@ -412,9 +412,9 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-xs pt-8 pb-4 px-4 overflow-y-auto animate-in fade-in duration-150">
       <div
-        className={`w-full max-w-4xl max-h-[92vh] flex flex-col rounded-xl shadow-2xl overflow-hidden border ${
+        className={`w-full max-w-4xl max-h-[90vh] flex flex-col rounded-xl shadow-2xl overflow-hidden border shrink-0 ${
           isRetro
             ? 'bg-[#ece9d8] border-[#808080] text-black font-sans'
             : isDark
