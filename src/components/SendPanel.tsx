@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AppTheme, Packet } from '../types';
-import { Send, Play, Square, Zap, Star, Clock, Trash2, Plus, ChevronDown, Edit3 } from 'lucide-react';
+import { Send, Play, Square, Zap, Star, Clock, Trash2, Plus, ChevronDown, Edit3, Wrench } from 'lucide-react';
+import { PacketBuilderModal } from './PacketBuilderModal';
 
 interface FavoritePacket {
   id: string;
@@ -95,6 +96,9 @@ export const SendPanel: React.FC<SendPanelProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [isFavoritesOpen]);
+
+  // Packet Builder Modal State
+  const [isBuilderOpen, setIsBuilderOpen] = useState(false);
 
   // 1. Interval Repeat Mode
   const [autoRepeat, setAutoRepeat] = useState(false);
@@ -657,6 +661,23 @@ export const SendPanel: React.FC<SendPanelProps> = ({
         )}
       </div>
 
+      {/* "패킷 생성기" Modal Trigger Button */}
+      <button
+        type="button"
+        onClick={() => setIsBuilderOpen(true)}
+        className={`px-2.5 py-1 rounded font-medium text-xs flex items-center gap-1.5 transition-all shadow-sm shrink-0 ${
+          isRetro
+            ? 'border-2 border-outset border-[#ffffff] bg-[#d4d0c8] text-black active:border-inset hover:bg-zinc-200'
+            : isDark
+            ? 'bg-zinc-800 hover:bg-zinc-700 text-indigo-400 border border-zinc-700'
+            : 'bg-white hover:bg-zinc-100 text-indigo-600 border border-zinc-300'
+        }`}
+        title="Modbus 및 표준 프레임 패킷 생성 마법사 & 공학용 진수 변환기"
+      >
+        <Wrench size={13} className="text-amber-500" />
+        <span>패킷 생성기</span>
+      </button>
+
       {/* Main Send Input Box */}
       <div className="flex-1 relative flex items-center min-w-0">
         <input
@@ -793,6 +814,34 @@ export const SendPanel: React.FC<SendPanelProps> = ({
           <span className="text-[10px] text-zinc-500">ms</span>
         </div>
       </div>
+
+      {/* Packet Builder & Multi-Radix Calculator Modal */}
+      <PacketBuilderModal
+        isOpen={isBuilderOpen}
+        onClose={() => setIsBuilderOpen(false)}
+        theme={theme}
+        onApplyToSend={(dataStr, fmt) => {
+          setData(dataStr);
+          setFormat(fmt);
+        }}
+        onDirectSend={(dataStr, fmt) => {
+          setData(dataStr);
+          setFormat(fmt);
+          onSend(dataStr, fmt);
+          recordSentPacket(dataStr, fmt);
+        }}
+        onAddToFavorites={(dataStr, fmt, label) => {
+          const newItem: FavoritePacket = {
+            id: `fav-${Date.now()}`,
+            label,
+            data: dataStr,
+            format: fmt,
+            isFavorite: true,
+            timestamp: Date.now()
+          };
+          setPacketList((prev) => [newItem, ...prev.filter((p) => p.data !== dataStr)]);
+        }}
+      />
     </div>
   );
 };
