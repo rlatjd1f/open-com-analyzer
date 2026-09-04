@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
+import React, { useState, useRef, useLayoutEffect, useCallback, memo } from 'react';
 import type { Packet, AppTheme } from '../types';
 
 interface PacketRowProps {
@@ -173,7 +173,6 @@ export const PacketGrid: React.FC<PacketGridProps> = ({
   autoScroll
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const isScrollingRef = useRef(false);
 
   const [hoveredByte, setHoveredByte] = useState<{
     byte: number;
@@ -183,18 +182,13 @@ export const PacketGrid: React.FC<PacketGridProps> = ({
   } | null>(null);
   const [hoverPos, setHoverPos] = useState<{ x: number; y: number } | null>(null);
 
-  // Smooth Auto Scroll using requestAnimationFrame (prevents layout thrashing)
-  useEffect(() => {
-    if (!autoScroll || !containerRef.current || isScrollingRef.current) return;
+  // Auto Scroll: Anchored to lastPacketId so FIFO ring buffer shifts keep scrolling to bottom
+  const lastPacketId = packets.length > 0 ? packets[packets.length - 1].id : null;
 
-    isScrollingRef.current = true;
-    requestAnimationFrame(() => {
-      if (containerRef.current) {
-        containerRef.current.scrollTop = containerRef.current.scrollHeight;
-      }
-      isScrollingRef.current = false;
-    });
-  }, [packets.length, autoScroll]);
+  useLayoutEffect(() => {
+    if (!autoScroll || !containerRef.current) return;
+    containerRef.current.scrollTop = containerRef.current.scrollHeight;
+  }, [lastPacketId, autoScroll]);
 
   const handleHoverByte = useCallback(
     (e: React.MouseEvent, info: { byte: number; idx: number; direction: 'rx' | 'tx'; timestamp: number }) => {
