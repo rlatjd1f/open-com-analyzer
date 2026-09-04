@@ -583,14 +583,14 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                     onChange={(e) => setFunctionCode(parseInt(e.target.value))}
                     className="w-full p-1.5 border rounded font-mono text-xs bg-transparent"
                   >
-                    <option value={1}>01 (0x01) - Read Coils</option>
-                    <option value={2}>02 (0x02) - Read Discrete Inputs</option>
-                    <option value={3}>03 (0x03) - Read Holding Registers (데이터 조회)</option>
-                    <option value={4}>04 (0x04) - Read Input Registers</option>
-                    <option value={5}>05 (0x05) - Write Single Coil</option>
-                    <option value={6}>06 (0x06) - Write Single Register</option>
-                    <option value={15}>15 (0x0F) - Write Multiple Coils</option>
-                    <option value={16}>16 (0x10) - Write Multiple Registers</option>
+                    <option value={1}>01 (0x01) - Read Coils (코일 상태 읽기 / 비트 조회)</option>
+                    <option value={2}>02 (0x02) - Read Discrete Inputs (이산 입력 읽기 / 디지털 입력 조회)</option>
+                    <option value={3}>03 (0x03) - Read Holding Registers (홀딩 레지스터 읽기 / 워드 데이터 조회)</option>
+                    <option value={4}>04 (0x04) - Read Input Registers (입력 레지스터 읽기 / 센서 입력 조회)</option>
+                    <option value={5}>05 (0x05) - Write Single Coil (단일 코일 쓰기 / 1비트 제어)</option>
+                    <option value={6}>06 (0x06) - Write Single Register (단일 레지스터 쓰기 / 1워드 설정)</option>
+                    <option value={15}>15 (0x0F) - Write Multiple Coils (다중 코일 쓰기 / 연속 비트 제어)</option>
+                    <option value={16}>16 (0x10) - Write Multiple Registers (다중 레지스터 쓰기 / 연속 워드 설정)</option>
                   </select>
                 </div>
               </div>
