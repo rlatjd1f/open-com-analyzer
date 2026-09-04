@@ -10,7 +10,10 @@ import {
   Check,
   Send,
   Plus,
-  Sparkles
+  Sparkles,
+  ArrowUpRight,
+  ArrowDownLeft,
+  AlertTriangle
 } from 'lucide-react';
 import {
   hexStringToBytes,
@@ -51,12 +54,21 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [activeTab, setActiveTab] = useState<'modbus' | 'custom'>('modbus');
 
   // --- 1. Modbus State ---
+  const [modbusMsgType, setModbusMsgType] = useState<'request' | 'response' | 'exception'>('request');
   const [slaveId, setSlaveId] = useState<number>(1);
   const [functionCode, setFunctionCode] = useState<number>(3); // 03 Read Holding Registers
   const [startAddress, setStartAddress] = useState<number>(0);
   const [quantity, setQuantity] = useState<number>(10);
   const [singleValue, setSingleValue] = useState<number>(0);
   const [modbusCrcOrder, setModbusCrcOrder] = useState<'lsb' | 'msb'>('lsb');
+
+  // Modbus Response specific state
+  const [respDataHex, setRespDataHex] = useState<string>('00 F0 01 F4 00 0A 00 3C 00 1E 00 B4 00 1E 00 0A 00 32 00 96');
+  const [autoByteCount, setAutoByteCount] = useState<boolean>(true);
+  const [manualByteCount, setManualByteCount] = useState<number>(20);
+
+  // Modbus Exception specific state
+  const [exceptionCode, setExceptionCode] = useState<number>(2); // 02 Illegal Data Address
 
   // --- 2. Custom Standard Frame State ---
   // A. Header
@@ -103,27 +115,59 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const handleRadixChange = (val: string, radix: 'hex' | 'dec' | 'oct' | 'bin') => {
     setActiveRadix(radix);
     const result = convertFromRadix(val, radix);
-    // Keep user's exact typed string in active field for fluid typing
     setRadixInputs({
       ...result,
       [radix]: val
     });
   };
 
-  // --- Modbus Packet Assembler ---
+  // --- Modbus Packet Assembler (Request / Response / Exception) ---
   const modbusResult = useMemo(() => {
     const bytes: number[] = [];
     bytes.push(slaveId & 0xFF);
-    bytes.push(functionCode & 0xFF);
-    bytes.push((startAddress >> 8) & 0xFF);
-    bytes.push(startAddress & 0xFF);
 
-    if (functionCode === 5 || functionCode === 6) {
-      bytes.push((singleValue >> 8) & 0xFF);
-      bytes.push(singleValue & 0xFF);
+    if (modbusMsgType === 'request') {
+      // 1. Master Request
+      bytes.push(functionCode & 0xFF);
+      bytes.push((startAddress >> 8) & 0xFF);
+      bytes.push(startAddress & 0xFF);
+
+      if (functionCode === 5 || functionCode === 6) {
+        bytes.push((singleValue >> 8) & 0xFF);
+        bytes.push(singleValue & 0xFF);
+      } else {
+        bytes.push((quantity >> 8) & 0xFF);
+        bytes.push(quantity & 0xFF);
+      }
+    } else if (modbusMsgType === 'response') {
+      // 2. Slave Response
+      bytes.push(functionCode & 0xFF);
+
+      if (functionCode === 1 || functionCode === 2 || functionCode === 3 || functionCode === 4) {
+        // Read Response: [Slave ID] [FC] [Byte Count] [Data Bytes...]
+        const dataBytes = Array.from(hexStringToBytes(respDataHex));
+        const byteCount = autoByteCount ? dataBytes.length : manualByteCount;
+        bytes.push(byteCount & 0xFF);
+        for (let i = 0; i < dataBytes.length; i++) {
+          bytes.push(dataBytes[i]);
+        }
+      } else if (functionCode === 5 || functionCode === 6) {
+        // Write Single: Echo [Address] [Value]
+        bytes.push((startAddress >> 8) & 0xFF);
+        bytes.push(startAddress & 0xFF);
+        bytes.push((singleValue >> 8) & 0xFF);
+        bytes.push(singleValue & 0xFF);
+      } else {
+        // Write Multiple: Echo [Start Address] [Quantity]
+        bytes.push((startAddress >> 8) & 0xFF);
+        bytes.push(startAddress & 0xFF);
+        bytes.push((quantity >> 8) & 0xFF);
+        bytes.push(quantity & 0xFF);
+      }
     } else {
-      bytes.push((quantity >> 8) & 0xFF);
-      bytes.push(quantity & 0xFF);
+      // 3. Exception Response: [Slave ID] [FC + 0x80] [Exception Code]
+      bytes.push((functionCode + 0x80) & 0xFF);
+      bytes.push(exceptionCode & 0xFF);
     }
 
     const payloadBytes = new Uint8Array(bytes);
@@ -146,9 +190,23 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
       bytes,
       hexStr,
       asciiStr,
-      crcHex: `${crcLow.toString(16).toUpperCase().padStart(2, '0')} ${crcHigh.toString(16).toUpperCase().padStart(2, '0')}`
+      crcHex: modbusCrcOrder === 'lsb'
+        ? `${crcLow.toString(16).toUpperCase().padStart(2, '0')} ${crcHigh.toString(16).toUpperCase().padStart(2, '0')}`
+        : `${crcHigh.toString(16).toUpperCase().padStart(2, '0')} ${crcLow.toString(16).toUpperCase().padStart(2, '0')}`
     };
-  }, [slaveId, functionCode, startAddress, quantity, singleValue, modbusCrcOrder]);
+  }, [
+    slaveId,
+    modbusMsgType,
+    functionCode,
+    startAddress,
+    quantity,
+    singleValue,
+    modbusCrcOrder,
+    respDataHex,
+    autoByteCount,
+    manualByteCount,
+    exceptionCode
+  ]);
 
   // --- Custom Standard Frame Assembler ---
   const customResult = useMemo(() => {
@@ -274,9 +332,14 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   };
 
   const handleAddFavoriteClick = () => {
-    const label = activeTab === 'modbus'
-      ? `Modbus FC${functionCode.toString().padStart(2, '0')} (Addr: ${startAddress})`
-      : `Frame (${'fullBytes' in currentPacket ? currentPacket.fullBytes.length : currentPacket.bytes.length}B)`;
+    let label = '';
+    if (activeTab === 'modbus') {
+      const typeStr = modbusMsgType === 'request' ? '요청' : modbusMsgType === 'response' ? '응답' : '예외';
+      label = `Modbus FC${functionCode.toString().padStart(2, '0')} ${typeStr}`;
+    } else {
+      label = `Frame (${'fullBytes' in currentPacket ? currentPacket.fullBytes.length : currentPacket.bytes.length}B)`;
+    }
+
     if (onAddToFavorites) {
       onAddToFavorites(currentPacket.hexStr, 'hex', label);
     }
@@ -293,6 +356,8 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
       } else {
         setPayloadText((prev) => prev + bytesToAscii(hexStringToBytes(clean)));
       }
+    } else if (activeTab === 'modbus' && modbusMsgType === 'response') {
+      setRespDataHex((prev) => (prev ? `${prev.trim()} ${clean}` : clean));
     } else {
       const parsedNum = parseInt(clean, 16);
       if (!isNaN(parsedNum)) {
@@ -375,6 +440,79 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
           {/* TAB 1: MODBUS BUILDER */}
           {activeTab === 'modbus' && (
             <div className="space-y-4">
+              {/* Modbus Message Type Sub-tabs (Request / Response / Exception) */}
+              <div className="flex items-center justify-between pb-1 border-b border-zinc-700/40">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-xs mr-1 opacity-80">패킷 유형:</span>
+                  <button
+                    type="button"
+                    onClick={() => setModbusMsgType('request')}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
+                      modbusMsgType === 'request'
+                        ? 'bg-indigo-600 text-white shadow-sm'
+                        : isRetro
+                        ? 'bg-white text-black border border-[#808080]'
+                        : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <ArrowUpRight size={12} />
+                    <span>마스터 요청 (Request)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModbusMsgType('response')}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
+                      modbusMsgType === 'response'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : isRetro
+                        ? 'bg-white text-black border border-[#808080]'
+                        : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <ArrowDownLeft size={12} />
+                    <span>슬레이브 응답 (Response)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModbusMsgType('exception')}
+                    className={`px-2.5 py-1 rounded text-xs font-semibold flex items-center gap-1 transition-all ${
+                      modbusMsgType === 'exception'
+                        ? 'bg-rose-600 text-white shadow-sm'
+                        : isRetro
+                        ? 'bg-white text-black border border-[#808080]'
+                        : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <AlertTriangle size={12} />
+                    <span>예외/에러 응답 (Exception)</span>
+                  </button>
+                </div>
+
+                {/* CRC Byte Order */}
+                <div className="flex items-center gap-2 text-[11px]">
+                  <span className="opacity-70">CRC 엔디안:</span>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="modbusCrc"
+                      checked={modbusCrcOrder === 'lsb'}
+                      onChange={() => setModbusCrcOrder('lsb')}
+                    />
+                    <span>LSB First (표준)</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="modbusCrc"
+                      checked={modbusCrcOrder === 'msb'}
+                      onChange={() => setModbusCrcOrder('msb')}
+                    />
+                    <span>MSB</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Main Modbus Inputs */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 {/* Slave ID */}
                 <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
@@ -393,8 +531,10 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                 </div>
 
                 {/* Function Code */}
-                <div className={`p-3 rounded-lg border md:col-span-2 ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
-                  <label className="block font-semibold mb-1">기능 코드 (Function Code)</label>
+                <div className={`p-3 rounded-lg border md:col-span-3 ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                  <label className="block font-semibold mb-1">
+                    {modbusMsgType === 'exception' ? '요청받은 원래 기능 코드 (Function Code)' : '기능 코드 (Function Code)'}
+                  </label>
                   <select
                     value={functionCode}
                     onChange={(e) => setFunctionCode(parseInt(e.target.value))}
@@ -402,7 +542,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                   >
                     <option value={1}>01 (0x01) - Read Coils</option>
                     <option value={2}>02 (0x02) - Read Discrete Inputs</option>
-                    <option value={3}>03 (0x03) - Read Holding Registers</option>
+                    <option value={3}>03 (0x03) - Read Holding Registers (데이터 조회)</option>
                     <option value={4}>04 (0x04) - Read Input Registers</option>
                     <option value={5}>05 (0x05) - Write Single Coil</option>
                     <option value={6}>06 (0x06) - Write Single Register</option>
@@ -410,111 +550,182 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                     <option value={16}>16 (0x10) - Write Multiple Registers</option>
                   </select>
                 </div>
-
-                {/* CRC Byte Order */}
-                <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
-                  <label className="block font-semibold mb-1">CRC-16 엔디안</label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="modbusCrc"
-                        checked={modbusCrcOrder === 'lsb'}
-                        onChange={() => setModbusCrcOrder('lsb')}
-                      />
-                      <span>LSB First (표준)</span>
-                    </label>
-                    <label className="flex items-center gap-1 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="modbusCrc"
-                        checked={modbusCrcOrder === 'msb'}
-                        onChange={() => setModbusCrcOrder('msb')}
-                      />
-                      <span>MSB</span>
-                    </label>
-                  </div>
-                </div>
               </div>
 
-              {/* Address & Quantity Controls */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Start Address */}
-                <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold">시작 주소 (Start Address)</label>
-                    <span className="font-mono text-[11px] opacity-70">
-                      HEX: 0x{startAddress.toString(16).toUpperCase().padStart(4, '0')}
-                    </span>
-                  </div>
-                  <input
-                    type="number"
-                    min={0}
-                    max={65535}
-                    value={startAddress}
-                    onChange={(e) => setStartAddress(Math.max(0, Math.min(65535, parseInt(e.target.value) || 0)))}
-                    className="w-full p-2 border rounded font-mono text-xs bg-transparent"
-                    placeholder="예: 0"
-                  />
-                  <div className="flex gap-1.5 mt-2">
-                    {[0, 100, 1000, 40001].map((addr) => (
-                      <button
-                        key={addr}
-                        type="button"
-                        onClick={() => setStartAddress(addr)}
-                        className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10 font-mono"
-                      >
-                        {addr}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Quantity / Single Value */}
-                <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="font-semibold">
-                      {functionCode === 5 || functionCode === 6 ? '설정 값 (Value)' : '요청 개수 (Quantity)'}
-                    </label>
-                    <span className="font-mono text-[11px] opacity-70">
-                      HEX: 0x{(functionCode === 5 || functionCode === 6 ? singleValue : quantity).toString(16).toUpperCase().padStart(4, '0')}
-                    </span>
-                  </div>
-                  {functionCode === 5 || functionCode === 6 ? (
+              {/* Mode A: REQUEST CONTROLS */}
+              {modbusMsgType === 'request' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Start Address */}
+                  <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-semibold">시작 주소 (Start Address)</label>
+                      <span className="font-mono text-[11px] opacity-70">
+                        HEX: 0x{startAddress.toString(16).toUpperCase().padStart(4, '0')}
+                      </span>
+                    </div>
                     <input
                       type="number"
                       min={0}
                       max={65535}
-                      value={singleValue}
-                      onChange={(e) => setSingleValue(Math.max(0, Math.min(65535, parseInt(e.target.value) || 0)))}
+                      value={startAddress}
+                      onChange={(e) => setStartAddress(Math.max(0, Math.min(65535, parseInt(e.target.value) || 0)))}
                       className="w-full p-2 border rounded font-mono text-xs bg-transparent"
-                      placeholder="예: 1"
+                      placeholder="예: 0"
                     />
-                  ) : (
-                    <input
-                      type="number"
-                      min={1}
-                      max={125}
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, Math.min(125, parseInt(e.target.value) || 1)))}
-                      className="w-full p-2 border rounded font-mono text-xs bg-transparent"
-                      placeholder="예: 10"
-                    />
-                  )}
-                  <div className="flex gap-1.5 mt-2">
-                    {[1, 2, 8, 10, 20].map((q) => (
-                      <button
-                        key={q}
-                        type="button"
-                        onClick={() => (functionCode === 5 || functionCode === 6 ? setSingleValue(q) : setQuantity(q))}
-                        className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10 font-mono"
-                      >
-                        {q}개
-                      </button>
-                    ))}
+                    <div className="flex gap-1.5 mt-2">
+                      {[0, 100, 1000, 40001].map((addr) => (
+                        <button
+                          key={addr}
+                          type="button"
+                          onClick={() => setStartAddress(addr)}
+                          className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10 font-mono"
+                        >
+                          {addr}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quantity / Single Value */}
+                  <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="font-semibold">
+                        {functionCode === 5 || functionCode === 6 ? '설정 값 (Value)' : '요청 개수 (Quantity)'}
+                      </label>
+                      <span className="font-mono text-[11px] opacity-70">
+                        HEX: 0x{(functionCode === 5 || functionCode === 6 ? singleValue : quantity).toString(16).toUpperCase().padStart(4, '0')}
+                      </span>
+                    </div>
+                    {functionCode === 5 || functionCode === 6 ? (
+                      <input
+                        type="number"
+                        min={0}
+                        max={65535}
+                        value={singleValue}
+                        onChange={(e) => setSingleValue(Math.max(0, Math.min(65535, parseInt(e.target.value) || 0)))}
+                        className="w-full p-2 border rounded font-mono text-xs bg-transparent"
+                        placeholder="예: 1"
+                      />
+                    ) : (
+                      <input
+                        type="number"
+                        min={1}
+                        max={125}
+                        value={quantity}
+                        onChange={(e) => setQuantity(Math.max(1, Math.min(125, parseInt(e.target.value) || 1)))}
+                        className="w-full p-2 border rounded font-mono text-xs bg-transparent"
+                        placeholder="예: 10"
+                      />
+                    )}
+                    <div className="flex gap-1.5 mt-2">
+                      {[1, 2, 8, 10, 20].map((q) => (
+                        <button
+                          key={q}
+                          type="button"
+                          onClick={() => (functionCode === 5 || functionCode === 6 ? setSingleValue(q) : setQuantity(q))}
+                          className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10 font-mono"
+                        >
+                          {q}개
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
+
+              {/* Mode B: RESPONSE CONTROLS */}
+              {modbusMsgType === 'response' && (
+                <div className="space-y-3">
+                  {(functionCode === 1 || functionCode === 2 || functionCode === 3 || functionCode === 4) ? (
+                    <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-emerald-400">응답 데이터 본문 (HEX Bytes)</span>
+                          <span className="text-[10px] opacity-70">
+                            바이트 수: {autoByteCount ? hexStringToBytes(respDataHex).length : manualByteCount}B (0x{(autoByteCount ? hexStringToBytes(respDataHex).length : manualByteCount).toString(16).toUpperCase().padStart(2, '0')})
+                            {functionCode === 3 || functionCode === 4 ? ` = ${Math.floor(hexStringToBytes(respDataHex).length / 2)}개 레지스터` : ''}
+                          </span>
+                          <label className="flex items-center gap-1 cursor-pointer text-[11px] opacity-90">
+                            <input
+                              type="checkbox"
+                              checked={autoByteCount}
+                              onChange={(e) => setAutoByteCount(e.target.checked)}
+                            />
+                            <span>바이트수 자동</span>
+                          </label>
+                          {!autoByteCount && (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] opacity-70">수동지정:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={255}
+                                value={manualByteCount}
+                                onChange={(e) => setManualByteCount(Math.max(1, Math.min(255, parseInt(e.target.value) || 1)))}
+                                className="w-12 p-0.5 border rounded font-mono text-xs bg-transparent"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // 160 bytes AR147 standard sample
+                              setRespDataHex('00F001F4000A003C001E00B4001E000A00320096009600050005000500FA00FA00140014000500050005000A00020003000300010001000200020002000100020001000F000F00320032015E000100070100000105F0030C026C00960082006E00500032010400D2000A001E002D00030009001A000500200000000100EB020800260073006C002B002900BA00B6000100DC001400DC0014000F0001000500F8');
+                            }}
+                            className="px-2 py-0.5 rounded border text-[10px] font-semibold hover:bg-zinc-500/10"
+                          >
+                            160B 모니터링 샘플
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // 10 registers sample (20 bytes)
+                              setRespDataHex('000100020003000400050006000700080009000A');
+                            }}
+                            className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10"
+                          >
+                            10개 레지스터 샘플
+                          </button>
+                        </div>
+                      </div>
+
+                      <textarea
+                        rows={3}
+                        value={respDataHex}
+                        onChange={(e) => setRespDataHex(e.target.value)}
+                        placeholder="응답할 HEX 데이터를 띄어쓰기 또는 붙여서 입력하세요 (예: 00 F0 01 F4 ...)"
+                        className="w-full p-2 border rounded font-mono text-xs bg-transparent uppercase"
+                      />
+                    </div>
+                  ) : (
+                    <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                      <span className="font-semibold text-xs block mb-1">쓰기 응답 에코 설정</span>
+                      <p className="opacity-70 text-[11px]">
+                        FC {functionCode.toString().padStart(2, '0')} 응답은 표준 Modbus 규칙에 따라 요청 프레임의 주소 및 값을 확인(Acknowledge Echo)하여 반환합니다.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Mode C: EXCEPTION CONTROLS */}
+              {modbusMsgType === 'exception' && (
+                <div className={`p-3 rounded-lg border border-rose-500/40 ${isRetro ? 'bg-white' : isDark ? 'bg-rose-950/20' : 'bg-rose-50'}`}>
+                  <label className="block font-semibold mb-1 text-rose-400">예외 에러 코드 (Exception Code)</label>
+                  <select
+                    value={exceptionCode}
+                    onChange={(e) => setExceptionCode(parseInt(e.target.value))}
+                    className="w-full p-2 border rounded font-mono text-xs bg-transparent font-semibold"
+                  >
+                    <option value={1}>01 (0x01) - Illegal Function (지원하지 않는 기능 코드)</option>
+                    <option value={2}>02 (0x02) - Illegal Data Address (잘못된 레지스터 주소)</option>
+                    <option value={3}>03 (0x03) - Illegal Data Value (유효하지 않은 데이터 값/범위)</option>
+                    <option value={4}>04 (0x04) - Slave Device Failure (슬레이브 장비 내부 고장)</option>
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -566,6 +777,13 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                         className="px-1.5 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10"
                       >
                         AA 55
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setHeaderBytesCount(3); setHeaderHex('01 03 A0'); }}
+                        className="px-1.5 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10"
+                      >
+                        01 03 A0
                       </button>
                     </div>
                   )}
@@ -778,14 +996,37 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                     ID: 0x{slaveId.toString(16).toUpperCase().padStart(2, '0')}
                   </span>
                   <span className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300">
-                    FC: 0x{functionCode.toString(16).toUpperCase().padStart(2, '0')}
+                    FC: 0x{(modbusMsgType === 'exception' ? functionCode + 0x80 : functionCode).toString(16).toUpperCase().padStart(2, '0')}
                   </span>
-                  <span className="px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
-                    Addr: 0x{startAddress.toString(16).toUpperCase().padStart(4, '0')}
-                  </span>
-                  <span className="px-2 py-1 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">
-                    {functionCode === 5 || functionCode === 6 ? 'Val' : 'Qty'}: 0x{(functionCode === 5 || functionCode === 6 ? singleValue : quantity).toString(16).toUpperCase().padStart(4, '0')}
-                  </span>
+
+                  {modbusMsgType === 'request' && (
+                    <>
+                      <span className="px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
+                        Addr: 0x{startAddress.toString(16).toUpperCase().padStart(4, '0')}
+                      </span>
+                      <span className="px-2 py-1 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">
+                        {functionCode === 5 || functionCode === 6 ? 'Val' : 'Qty'}: 0x{(functionCode === 5 || functionCode === 6 ? singleValue : quantity).toString(16).toUpperCase().padStart(4, '0')}
+                      </span>
+                    </>
+                  )}
+
+                  {modbusMsgType === 'response' && (functionCode === 1 || functionCode === 2 || functionCode === 3 || functionCode === 4) && (
+                    <>
+                      <span className="px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
+                        ByteCount: 0x{hexStringToBytes(respDataHex).length.toString(16).toUpperCase().padStart(2, '0')} ({hexStringToBytes(respDataHex).length}B)
+                      </span>
+                      <span className="px-2 py-1 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">
+                        Data: {hexStringToBytes(respDataHex).length} Bytes
+                      </span>
+                    </>
+                  )}
+
+                  {modbusMsgType === 'exception' && (
+                    <span className="px-2 py-1 rounded bg-rose-500/20 border border-rose-500/40 text-rose-300 font-bold">
+                      ErrCode: 0x{exceptionCode.toString(16).toUpperCase().padStart(2, '0')}
+                    </span>
+                  )}
+
                   <span className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold">
                     CRC: {modbusResult.crcHex}
                   </span>
