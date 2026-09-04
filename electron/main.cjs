@@ -1,10 +1,79 @@
-const { app, BrowserWindow, Menu, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 
 app.name = 'COM Analyzer';
 if (app.setName) {
   app.setName('COM Analyzer');
 }
+
+// Global Crash / Error Logger to ~/Downloads and ~/Library/Logs
+function writeCrashLog(type, error) {
+  try {
+    const timestamp = new Date().toISOString();
+    const logHeader = `==================== [${type}] ${timestamp} ====================\n`;
+    const envInfo = [
+      `App Version: ${app.isPackaged ? app.getVersion() : 'Dev-0.0.8'}`,
+      `Electron: ${process.versions.electron}`,
+      `Node: ${process.versions.node}`,
+      `Platform: ${process.platform} (${process.arch})`,
+      `OS: ${os.type()} ${os.release()} (${os.arch()})`,
+      `Exec Path: ${process.execPath}`,
+      `Working Dir: ${process.cwd()}`
+    ].join('\n');
+
+    const errDetails = error instanceof Error
+      ? `${error.name}: ${error.message}\nStack:\n${error.stack}`
+      : typeof error === 'object' ? JSON.stringify(error, null, 2) : String(error);
+
+    const fullLog = `${logHeader}${envInfo}\n\n[Error Details]\n${errDetails}\n\n`;
+
+    // 1. Write to user's Downloads directory for easy access
+    let downloadsDir = path.join(os.homedir(), 'Downloads');
+    try {
+      if (app.getPath) downloadsDir = app.getPath('downloads');
+    } catch (e) {}
+
+    const downloadsLogPath = path.join(downloadsDir, 'COM_Analyzer_error.log');
+    try {
+      fs.appendFileSync(downloadsLogPath, fullLog, 'utf8');
+      console.log(`[Logger] Saved error log to: ${downloadsLogPath}`);
+    } catch (e) {
+      console.error('[Logger] Failed to write to Downloads log:', e);
+    }
+
+    // 2. Write to system app logs directory
+    try {
+      const logsDir = app.getPath ? app.getPath('logs') : path.join(os.homedir(), 'Library', 'Logs', 'COM Analyzer');
+      if (!fs.existsSync(logsDir)) {
+        fs.mkdirSync(logsDir, { recursive: true });
+      }
+      fs.appendFileSync(path.join(logsDir, 'com-analyzer-error.log'), fullLog, 'utf8');
+    } catch (e) {}
+
+    // 3. Show native error box popup if possible
+    if (dialog && dialog.showErrorBox) {
+      dialog.showErrorBox(
+        'COM Analyzer 실행 오류 발생',
+        `프로그램 실행 중 문제가 발생했습니다.\n\n${error && error.message ? error.message : String(error)}\n\n상세 오류 로그가 다운로드 폴더에 저장되었습니다:\n${downloadsLogPath}`
+      );
+    }
+  } catch (criticalErr) {
+    console.error('[Logger] Critical logging failure:', criticalErr);
+  }
+}
+
+// Catch all unhandled exceptions and promise rejections
+process.on('uncaughtException', (error) => {
+  console.error('[Process] Uncaught Exception:', error);
+  writeCrashLog('UNCAUGHT_EXCEPTION', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process] Unhandled Rejection:', reason);
+  writeCrashLog('UNHANDLED_REJECTION', reason);
+});
 
 // Ensure single instance to prevent EADDRINUSE conflicts
 const gotTheLock = app.requestSingleInstanceLock();
@@ -35,6 +104,7 @@ function startBackendServer() {
     console.log('Backend server integrated directly in Electron process.');
   } catch (err) {
     console.error('Failed to start integrated backend server:', err);
+    writeCrashLog('BACKEND_STARTUP_ERROR', err);
   }
 }
 
@@ -77,6 +147,16 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(() => {
     createWindow();
     return { action: 'deny' };
+  });
+
+  win.webContents.on('render-process-gone', (event, details) => {
+    console.error('Renderer process gone:', details);
+    writeCrashLog('RENDERER_PROCESS_GONE', new Error(`Reason: ${details.reason}, Exit Code: ${details.exitCode}`));
+  });
+
+  win.webContents.on('unresponsive', () => {
+    console.warn('Window content is unresponsive');
+    writeCrashLog('WINDOW_UNRESPONSIVE', new Error('BrowserWindow webContents became unresponsive'));
   });
 
   win.on('closed', () => {
