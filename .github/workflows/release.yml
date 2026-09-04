@@ -44,23 +44,28 @@ jobs:
       - name: Generate Release Notes
         shell: bash
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || echo "")
-          echo "## ⚡️ Open COM Analyzer ${{ github.ref_name }}" > RELEASE_BODY.md
-          echo "" >> RELEASE_BODY.md
-
-          if [ -n "$PREV_TAG" ]; then
-            echo "### 🔄 이전 버전($PREV_TAG) 이후 주요 작업 및 변경 내역" >> RELEASE_BODY.md
-            echo "" >> RELEASE_BODY.md
+          if [ -s "RELEASE_BODY.md" ] && grep -q "${{ github.ref_name }}" "RELEASE_BODY.md"; then
+            echo "✅ Repository contains curated RELEASE_BODY.md for ${{ github.ref_name }}. Preserving."
           else
-            echo "### 🚀 초기 릴리즈 내역" >> RELEASE_BODY.md
+            echo "Generating automated fallback release notes..."
+            PREV_TAG=$(git describe --tags --abbrev=0 "${{ github.ref_name }}^" 2>/dev/null || echo "")
+            echo "## ⚡️ Open COM Analyzer ${{ github.ref_name }}" > RELEASE_BODY.md
             echo "" >> RELEASE_BODY.md
-          fi
 
-          python3 scripts/generate-release-notes.py "$PREV_TAG" "${{ github.ref_name }}"
+            if [ -n "$PREV_TAG" ]; then
+              echo "### 🔄 이전 버전($PREV_TAG) 이후 주요 작업 및 변경 내역" >> RELEASE_BODY.md
+              echo "" >> RELEASE_BODY.md
+            else
+              echo "### 🚀 초기 릴리즈 내역" >> RELEASE_BODY.md
+              echo "" >> RELEASE_BODY.md
+            fi
 
-          if [ -n "$PREV_TAG" ]; then
-            echo "" >> RELEASE_BODY.md
-            echo "**전체 커밋 비교**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> RELEASE_BODY.md
+            python3 scripts/generate-release-notes.py "$PREV_TAG" "${{ github.ref_name }}"
+
+            if [ -n "$PREV_TAG" ]; then
+              echo "" >> RELEASE_BODY.md
+              echo "**전체 커밋 비교**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> RELEASE_BODY.md
+            fi
           fi
 
           echo "" >> RELEASE_BODY.md
