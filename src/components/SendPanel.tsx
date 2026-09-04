@@ -501,6 +501,14 @@ export const SendPanel: React.FC<SendPanelProps> = ({
                             >
                               <Send size={12} />
                             </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeletePacket(pkt.id, e)}
+                              className="p-1 rounded text-zinc-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                              title="즐겨찾기 삭제"
+                            >
+                              <Trash2 size={12} />
+                            </button>
                           </div>
                         )}
                       </div>
