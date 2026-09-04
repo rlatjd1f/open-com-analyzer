@@ -13,7 +13,8 @@ import {
   Sparkles,
   ArrowUpRight,
   ArrowDownLeft,
-  AlertTriangle
+  AlertTriangle,
+  Network
 } from 'lucide-react';
 import {
   hexStringToBytes,
@@ -54,6 +55,10 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [activeTab, setActiveTab] = useState<'modbus' | 'custom'>('modbus');
 
   // --- 1. Modbus State ---
+  const [modbusProtocol, setModbusProtocol] = useState<'rtu' | 'tcp'>('rtu');
+  const [includeModbusRtuCrc, setIncludeModbusRtuCrc] = useState<boolean>(true);
+  const [tcpTransactionId, setTcpTransactionId] = useState<number>(1);
+  const tcpProtocolId = 0; // 0x0000 Modbus Protocol
   const [modbusMsgType, setModbusMsgType] = useState<'request' | 'response' | 'exception'>('request');
   const [slaveId, setSlaveId] = useState<number>(1);
   const [functionCode, setFunctionCode] = useState<number>(3); // 03 Read Holding Registers
@@ -126,64 +131,102 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
 
   // --- Modbus Packet Assembler (Request / Response / Exception) ---
   const modbusResult = useMemo(() => {
-    const bytes: number[] = [];
-    bytes.push(slaveId & 0xFF);
+    // 1. Build PDU (Protocol Data Unit: Function Code + Data)
+    const pduBytes: number[] = [];
 
     if (modbusMsgType === 'request') {
       // 1. Master Request
-      bytes.push(functionCode & 0xFF);
-      bytes.push((startAddress >> 8) & 0xFF);
-      bytes.push(startAddress & 0xFF);
+      pduBytes.push(functionCode & 0xFF);
+      pduBytes.push((startAddress >> 8) & 0xFF);
+      pduBytes.push(startAddress & 0xFF);
 
       if (functionCode === 5 || functionCode === 6) {
-        bytes.push((singleValue >> 8) & 0xFF);
-        bytes.push(singleValue & 0xFF);
+        pduBytes.push((singleValue >> 8) & 0xFF);
+        pduBytes.push(singleValue & 0xFF);
       } else {
-        bytes.push((quantity >> 8) & 0xFF);
-        bytes.push(quantity & 0xFF);
+        pduBytes.push((quantity >> 8) & 0xFF);
+        pduBytes.push(quantity & 0xFF);
       }
     } else if (modbusMsgType === 'response') {
       // 2. Slave Response
-      bytes.push(functionCode & 0xFF);
+      pduBytes.push(functionCode & 0xFF);
 
       if (functionCode === 1 || functionCode === 2 || functionCode === 3 || functionCode === 4) {
-        // Read Response: [Slave ID] [FC] [Byte Count] [Data Bytes...]
+        // Read Response: [FC] [Byte Count] [Data Bytes...]
         const dataBytes = Array.from(hexStringToBytes(respDataHex));
         const byteCount = autoByteCount ? dataBytes.length : manualByteCount;
-        bytes.push(byteCount & 0xFF);
+        pduBytes.push(byteCount & 0xFF);
         for (let i = 0; i < dataBytes.length; i++) {
-          bytes.push(dataBytes[i]);
+          pduBytes.push(dataBytes[i]);
         }
       } else if (functionCode === 5 || functionCode === 6) {
         // Write Single: Echo [Address] [Value]
-        bytes.push((startAddress >> 8) & 0xFF);
-        bytes.push(startAddress & 0xFF);
-        bytes.push((singleValue >> 8) & 0xFF);
-        bytes.push(singleValue & 0xFF);
+        pduBytes.push((startAddress >> 8) & 0xFF);
+        pduBytes.push(startAddress & 0xFF);
+        pduBytes.push((singleValue >> 8) & 0xFF);
+        pduBytes.push(singleValue & 0xFF);
       } else {
         // Write Multiple: Echo [Start Address] [Quantity]
-        bytes.push((startAddress >> 8) & 0xFF);
-        bytes.push(startAddress & 0xFF);
-        bytes.push((quantity >> 8) & 0xFF);
-        bytes.push(quantity & 0xFF);
+        pduBytes.push((startAddress >> 8) & 0xFF);
+        pduBytes.push(startAddress & 0xFF);
+        pduBytes.push((quantity >> 8) & 0xFF);
+        pduBytes.push(quantity & 0xFF);
       }
     } else {
-      // 3. Exception Response: [Slave ID] [FC + 0x80] [Exception Code]
-      bytes.push((functionCode + 0x80) & 0xFF);
-      bytes.push(exceptionCode & 0xFF);
+      // 3. Exception Response: [FC + 0x80] [Exception Code]
+      pduBytes.push((functionCode + 0x80) & 0xFF);
+      pduBytes.push(exceptionCode & 0xFF);
     }
 
-    const payloadBytes = new Uint8Array(bytes);
-    const crc = calculateCrc16Modbus(payloadBytes);
-    const crcLow = crc & 0xFF;
-    const crcHigh = (crc >> 8) & 0xFF;
+    const bytes: number[] = [];
+    let crcHex = '';
+    let mbapHeaderBytes: number[] = [];
 
-    if (modbusCrcOrder === 'lsb') {
-      bytes.push(crcLow);
-      bytes.push(crcHigh);
+    if (modbusProtocol === 'rtu') {
+      // RTU Frame: [Slave ID (1B)] + [PDU...] + [CRC-16 (2B optional)]
+      bytes.push(slaveId & 0xFF);
+      for (const b of pduBytes) {
+        bytes.push(b);
+      }
+
+      if (includeModbusRtuCrc) {
+        const payloadBytes = new Uint8Array(bytes);
+        const crc = calculateCrc16Modbus(payloadBytes);
+        const crcLow = crc & 0xFF;
+        const crcHigh = (crc >> 8) & 0xFF;
+
+        if (modbusCrcOrder === 'lsb') {
+          bytes.push(crcLow);
+          bytes.push(crcHigh);
+          crcHex = `${crcLow.toString(16).toUpperCase().padStart(2, '0')} ${crcHigh.toString(16).toUpperCase().padStart(2, '0')}`;
+        } else {
+          bytes.push(crcHigh);
+          bytes.push(crcLow);
+          crcHex = `${crcHigh.toString(16).toUpperCase().padStart(2, '0')} ${crcLow.toString(16).toUpperCase().padStart(2, '0')}`;
+        }
+      }
     } else {
-      bytes.push(crcHigh);
-      bytes.push(crcLow);
+      // TCP Frame: [MBAP Header (7B)] + [PDU...]
+      // Length = Unit ID (1B) + PDU bytes length
+      const lengthField = (1 + pduBytes.length) & 0xFFFF;
+      const unitId = slaveId & 0xFF;
+
+      mbapHeaderBytes = [
+        (tcpTransactionId >> 8) & 0xFF,
+        tcpTransactionId & 0xFF,
+        (tcpProtocolId >> 8) & 0xFF,
+        tcpProtocolId & 0xFF,
+        (lengthField >> 8) & 0xFF,
+        lengthField & 0xFF,
+        unitId
+      ];
+
+      for (const b of mbapHeaderBytes) {
+        bytes.push(b);
+      }
+      for (const b of pduBytes) {
+        bytes.push(b);
+      }
     }
 
     const hexStr = bytesToHexString(bytes);
@@ -191,24 +234,28 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
 
     return {
       bytes,
+      pduBytes,
+      mbapHeaderBytes,
       hexStr,
       asciiStr,
-      crcHex: modbusCrcOrder === 'lsb'
-        ? `${crcLow.toString(16).toUpperCase().padStart(2, '0')} ${crcHigh.toString(16).toUpperCase().padStart(2, '0')}`
-        : `${crcHigh.toString(16).toUpperCase().padStart(2, '0')} ${crcLow.toString(16).toUpperCase().padStart(2, '0')}`
+      crcHex
     };
   }, [
+    modbusProtocol,
     slaveId,
     modbusMsgType,
     functionCode,
     startAddress,
     quantity,
     singleValue,
+    includeModbusRtuCrc,
     modbusCrcOrder,
     respDataHex,
     autoByteCount,
     manualByteCount,
-    exceptionCode
+    exceptionCode,
+    tcpTransactionId,
+    tcpProtocolId
   ]);
 
   // --- Custom Standard Frame Assembler ---
@@ -337,8 +384,9 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const handleAddFavoriteClick = () => {
     let label = '';
     if (activeTab === 'modbus') {
+      const protoStr = modbusProtocol === 'tcp' ? 'Modbus TCP' : 'Modbus RTU';
       const typeStr = modbusMsgType === 'request' ? '요청' : modbusMsgType === 'response' ? '응답' : '예외';
-      label = `Modbus FC${functionCode.toString().padStart(2, '0')} ${typeStr}`;
+      label = `${protoStr} FC${functionCode.toString().padStart(2, '0')} ${typeStr}`;
     } else {
       label = `Frame (${'fullBytes' in currentPacket ? currentPacket.fullBytes.length : currentPacket.bytes.length}B)`;
     }
@@ -451,7 +499,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
               }`}
             >
               <Cpu size={13} />
-              <span>Modbus RTU / ASCII</span>
+              <span>Modbus (RTU / TCP)</span>
             </button>
             <button
               type="button"
@@ -483,6 +531,166 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
           {/* TAB 1: MODBUS BUILDER */}
           {activeTab === 'modbus' && (
             <div className="space-y-4">
+              {/* 0. Modbus Protocol Mode Selector (RTU vs TCP) */}
+              <div className={`p-2.5 rounded-lg border flex flex-wrap items-center justify-between gap-2 ${
+                isRetro ? 'bg-[#d4d0c8] border-[#808080]' : isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-zinc-100 border-zinc-300'
+              }`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs flex items-center gap-1">
+                    <Cpu size={14} className="text-amber-400" />
+                    <span>프로토콜:</span>
+                  </span>
+                  <div className="flex items-center gap-1 p-0.5 rounded-md bg-black/20 dark:bg-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setModbusProtocol('rtu')}
+                      className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        modbusProtocol === 'rtu'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <span>Modbus RTU (시리얼 / CRC)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModbusProtocol('tcp')}
+                      className={`px-3 py-1 rounded text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        modbusProtocol === 'tcp'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-zinc-400 hover:text-zinc-200'
+                      }`}
+                    >
+                      <Network size={12} />
+                      <span>Modbus TCP (이더넷 / MBAP)</span>
+                    </button>
+                  </div>
+                </div>
+
+                {modbusProtocol === 'rtu' ? (
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <label className="flex items-center gap-1.5 cursor-pointer font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={includeModbusRtuCrc}
+                        onChange={(e) => setIncludeModbusRtuCrc(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span>CRC-16 Modbus 자동 부착</span>
+                    </label>
+                    {includeModbusRtuCrc && (
+                      <div className="flex items-center gap-2 pl-2 border-l border-zinc-700/50">
+                        <span className="opacity-70">엔디안:</span>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="modbusCrc"
+                            checked={modbusCrcOrder === 'lsb'}
+                            onChange={() => setModbusCrcOrder('lsb')}
+                          />
+                          <span>LSB First (표준)</span>
+                        </label>
+                        <label className="flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="modbusCrc"
+                            checked={modbusCrcOrder === 'msb'}
+                            onChange={() => setModbusCrcOrder('msb')}
+                          />
+                          <span>MSB</span>
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-[11px] text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20 font-medium">
+                    <span>🌐 MBAP 헤더(7B) 자동 생성 / TCP 링크 CRC 생략</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Modbus TCP: MBAP Header Controls */}
+              {modbusProtocol === 'tcp' && (
+                <div className={`p-3 rounded-lg border ${
+                  isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-blue-950/20 border-blue-800/40' : 'bg-blue-50/60 border-blue-200'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-bold text-xs text-blue-400 flex items-center gap-1.5">
+                      <Network size={13} />
+                      <span>MBAP 헤더 구성 (총 7 바이트)</span>
+                    </span>
+                    <span className="text-[10px] opacity-70">
+                      * 길이(Length) 필드는 페이로드 크기에 따라 실시간 자동 계산됩니다 (Unit ID 1B + PDU 바이트 수)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
+                    {/* Transaction ID */}
+                    <div className="p-2 rounded bg-black/20 border border-zinc-700/40">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-semibold text-[11px]">트랜잭션 ID (2B)</span>
+                        <button
+                          type="button"
+                          onClick={() => setTcpTransactionId((prev) => (prev + 1) & 0xFFFF)}
+                          className="text-[10px] text-blue-400 hover:underline"
+                          title="트랜잭션 ID 1 증가"
+                        >
+                          +1 증가
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={65535}
+                          value={tcpTransactionId}
+                          onChange={(e) => setTcpTransactionId(Math.max(0, Math.min(65535, parseInt(e.target.value) || 0)))}
+                          className="w-full p-1 border rounded font-mono text-xs bg-transparent"
+                        />
+                        <span className="font-mono text-[11px] opacity-70">
+                          0x{tcpTransactionId.toString(16).toUpperCase().padStart(4, '0')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Protocol ID */}
+                    <div className="p-2 rounded bg-black/20 border border-zinc-700/40">
+                      <span className="font-semibold text-[11px] block mb-1">프로토콜 ID (2B)</span>
+                      <div className="flex items-center justify-between h-[28px] px-2 rounded border border-zinc-700/30 bg-zinc-800/30 font-mono text-xs">
+                        <span>0 (0x0000)</span>
+                        <span className="text-[10px] text-emerald-400 font-sans">Modbus</span>
+                      </div>
+                    </div>
+
+                    {/* Length Field (Auto Calculated) */}
+                    <div className="p-2 rounded bg-black/20 border border-blue-500/30 bg-blue-500/5">
+                      <span className="font-semibold text-[11px] text-blue-300 block mb-1">길이 (Length 2B) [자동]</span>
+                      <div className="flex items-center justify-between h-[28px] px-2 rounded border border-blue-500/40 bg-blue-950/40 font-mono text-xs text-blue-300 font-bold">
+                        <span>0x{((1 + modbusResult.pduBytes.length) & 0xFFFF).toString(16).toUpperCase().padStart(4, '0')}</span>
+                        <span className="text-[10px] font-sans font-normal opacity-80">{1 + modbusResult.pduBytes.length} Bytes</span>
+                      </div>
+                    </div>
+
+                    {/* Unit ID */}
+                    <div className="p-2 rounded bg-black/20 border border-zinc-700/40">
+                      <span className="font-semibold text-[11px] block mb-1">Unit ID (국번 1B)</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          max={255}
+                          value={slaveId}
+                          onChange={(e) => setSlaveId(Math.max(0, Math.min(255, parseInt(e.target.value) || 0)))}
+                          className="w-full p-1 border rounded font-mono text-xs bg-transparent"
+                        />
+                        <span className="font-mono text-[11px] opacity-70">
+                          0x{slaveId.toString(16).toUpperCase().padStart(2, '0')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Modbus Message Type Sub-tabs (Request / Response / Exception) */}
               <div className="flex items-center justify-between pb-1 border-b border-zinc-700/40">
                 <div className="flex items-center gap-1.5">
@@ -530,51 +738,30 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                     <span>예외/에러 응답 (Exception)</span>
                   </button>
                 </div>
-
-                {/* CRC Byte Order */}
-                <div className="flex items-center gap-2 text-[11px]">
-                  <span className="opacity-70">CRC 엔디안:</span>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="modbusCrc"
-                      checked={modbusCrcOrder === 'lsb'}
-                      onChange={() => setModbusCrcOrder('lsb')}
-                    />
-                    <span>LSB First (표준)</span>
-                  </label>
-                  <label className="flex items-center gap-1 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="modbusCrc"
-                      checked={modbusCrcOrder === 'msb'}
-                      onChange={() => setModbusCrcOrder('msb')}
-                    />
-                    <span>MSB</span>
-                  </label>
-                </div>
               </div>
 
               {/* Main Modbus Inputs */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                {/* Slave ID */}
-                <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
-                  <label className="block font-semibold mb-1">국번 (Slave ID)</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      max={247}
-                      value={slaveId}
-                      onChange={(e) => setSlaveId(Math.max(1, Math.min(247, parseInt(e.target.value) || 1)))}
-                      className="w-full p-1.5 border rounded font-mono text-xs bg-transparent"
-                    />
-                    <span className="font-mono text-[11px] opacity-60">0x{slaveId.toString(16).toUpperCase().padStart(2, '0')}</span>
+                {/* Slave ID (Only in RTU mode, in TCP it's inside MBAP Header) */}
+                {modbusProtocol === 'rtu' && (
+                  <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                    <label className="block font-semibold mb-1">국번 (Slave ID)</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={1}
+                        max={247}
+                        value={slaveId}
+                        onChange={(e) => setSlaveId(Math.max(1, Math.min(247, parseInt(e.target.value) || 1)))}
+                        className="w-full p-1.5 border rounded font-mono text-xs bg-transparent"
+                      />
+                      <span className="font-mono text-[11px] opacity-60">0x{slaveId.toString(16).toUpperCase().padStart(2, '0')}</span>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Function Code */}
-                <div className={`p-3 rounded-lg border md:col-span-3 ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
+                <div className={`p-3 rounded-lg border ${modbusProtocol === 'rtu' ? 'md:col-span-3' : 'md:col-span-4'} ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
                   <label className="block font-semibold mb-1">
                     {modbusMsgType === 'exception' ? '요청받은 원래 기능 코드 (Function Code)' : '기능 코드 (Function Code)'}
                   </label>
@@ -1105,19 +1292,37 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
             <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs mb-2">
               {activeTab === 'modbus' ? (
                 <>
-                  <span className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300">
-                    ID: 0x{slaveId.toString(16).toUpperCase().padStart(2, '0')}
-                  </span>
-                  <span className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300">
+                  {modbusProtocol === 'tcp' ? (
+                    <>
+                      <span className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300">
+                        Trans: 0x{tcpTransactionId.toString(16).toUpperCase().padStart(4, '0')}
+                      </span>
+                      <span className="px-2 py-1 rounded bg-blue-500/20 border border-blue-500/40 text-blue-300">
+                        Proto: 0x0000
+                      </span>
+                      <span className="px-2 py-1 rounded bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-bold">
+                        Len: 0x{((1 + modbusResult.pduBytes.length) & 0xFFFF).toString(16).toUpperCase().padStart(4, '0')} ({1 + modbusResult.pduBytes.length}B)
+                      </span>
+                      <span className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300">
+                        Unit: 0x{slaveId.toString(16).toUpperCase().padStart(2, '0')}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="px-2 py-1 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300">
+                      ID: 0x{slaveId.toString(16).toUpperCase().padStart(2, '0')}
+                    </span>
+                  )}
+
+                  <span className="px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
                     FC: 0x{(modbusMsgType === 'exception' ? functionCode + 0x80 : functionCode).toString(16).toUpperCase().padStart(2, '0')}
                   </span>
 
                   {modbusMsgType === 'request' && (
                     <>
-                      <span className="px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
+                      <span className="px-2 py-1 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">
                         Addr: 0x{startAddress.toString(16).toUpperCase().padStart(4, '0')}
                       </span>
-                      <span className="px-2 py-1 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">
+                      <span className="px-2 py-1 rounded bg-fuchsia-500/20 border border-fuchsia-500/40 text-fuchsia-300">
                         {functionCode === 5 || functionCode === 6 ? 'Val' : 'Qty'}: 0x{(functionCode === 5 || functionCode === 6 ? singleValue : quantity).toString(16).toUpperCase().padStart(4, '0')}
                       </span>
                     </>
@@ -1125,10 +1330,10 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
 
                   {modbusMsgType === 'response' && (functionCode === 1 || functionCode === 2 || functionCode === 3 || functionCode === 4) && (
                     <>
-                      <span className="px-2 py-1 rounded bg-indigo-500/20 border border-indigo-500/40 text-indigo-300">
+                      <span className="px-2 py-1 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">
                         ByteCount: 0x{hexStringToBytes(respDataHex).length.toString(16).toUpperCase().padStart(2, '0')} ({hexStringToBytes(respDataHex).length}B)
                       </span>
-                      <span className="px-2 py-1 rounded bg-purple-500/20 border border-purple-500/40 text-purple-300">
+                      <span className="px-2 py-1 rounded bg-fuchsia-500/20 border border-fuchsia-500/40 text-fuchsia-300">
                         Data: {hexStringToBytes(respDataHex).length} Bytes
                       </span>
                     </>
@@ -1140,9 +1345,11 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                     </span>
                   )}
 
-                  <span className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold">
-                    CRC: {modbusResult.crcHex}
-                  </span>
+                  {modbusProtocol === 'rtu' && includeModbusRtuCrc && (
+                    <span className="px-2 py-1 rounded bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold">
+                      CRC: {modbusResult.crcHex}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>
