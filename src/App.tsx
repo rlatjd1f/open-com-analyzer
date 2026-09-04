@@ -17,6 +17,8 @@ import {
   APP_VERSION
 } from './types';
 
+const CANDIDATE_PORTS = [4001, 4002, 4003, 4004, 4005, 4006, 4007, 4008, 4009, 4010];
+
 export const App: React.FC = () => {
   // --- States ---
   const [status, setStatus] = useState<ConnectionStatus>({
@@ -102,6 +104,8 @@ export const App: React.FC = () => {
   }, [theme]);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const portIndexRef = useRef(0);
+  const reconnectTimerRef = useRef<any>(null);
   const rxBlinkTimer = useRef<any>(null);
   const txBlinkTimer = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -134,12 +138,20 @@ export const App: React.FC = () => {
 
   // --- WebSocket Connection ---
   const connectWebSocket = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+
+    const port = CANDIDATE_PORTS[portIndexRef.current % CANDIDATE_PORTS.length];
     try {
-      const ws = new WebSocket('ws://localhost:4001');
+      const ws = new WebSocket(`ws://localhost:${port}`);
       wsRef.current = ws;
+      let didOpen = false;
 
       ws.onopen = () => {
-        console.log('Connected to COM Analyzer backend');
+        didOpen = true;
+        console.log(`Connected to COM Analyzer backend on port ${port}`);
         ws.send(JSON.stringify({ action: 'LIST_PORTS' }));
       };
 
@@ -264,21 +276,30 @@ export const App: React.FC = () => {
       };
 
       ws.onclose = () => {
-        console.log('Backend connection closed, retrying in 2s...');
-        setTimeout(connectWebSocket, 2000);
+        wsRef.current = null;
+        if (!didOpen) {
+          portIndexRef.current = (portIndexRef.current + 1) % CANDIDATE_PORTS.length;
+          reconnectTimerRef.current = setTimeout(connectWebSocket, 150);
+        } else {
+          console.log('Backend connection closed, retrying in 2s...');
+          reconnectTimerRef.current = setTimeout(connectWebSocket, 2000);
+        }
       };
 
-      ws.onerror = (err) => {
-        console.warn('Backend WS error:', err);
-      };
+      ws.onerror = () => {};
     } catch (err) {
-      console.error('Failed to init WS:', err);
+      console.error(`Failed to init WS on port ${port}:`, err);
+      portIndexRef.current = (portIndexRef.current + 1) % CANDIDATE_PORTS.length;
+      reconnectTimerRef.current = setTimeout(connectWebSocket, 200);
     }
   }, [isFrozen]);
 
   useEffect(() => {
     connectWebSocket();
     return () => {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
       if (wsRef.current) wsRef.current.close();
     };
   }, [connectWebSocket]);

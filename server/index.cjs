@@ -6,7 +6,7 @@ const VirtualDevice = require('./virtual-device.cjs');
 const UpdaterService = require('./updater-service.cjs');
 const { calculateSumCheck8, calculateSumCheck16, calculateCrc16Modbus, calculateCrc16Ccitt } = require('./crc.cjs');
 
-const PORT = 4001;
+const DEFAULT_PORT = 4001;
 const updaterService = new UpdaterService();
 const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -255,8 +255,28 @@ wss.on('connection', async (ws) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`COM Analyzer WebSocket server running on http://localhost:${PORT}`);
-});
+let currentPort = Number(process.env.PORT) || 4001;
 
-module.exports = { server, wss };
+function startListening(port) {
+  server.once('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`[Server] Port ${port} is in use (EADDRINUSE). Retrying on ${port + 1}...`);
+      if (port < 4010) {
+        currentPort = port + 1;
+        startListening(currentPort);
+      } else {
+        console.error('[Server] Could not find an available port between 4001 and 4010.');
+      }
+    } else {
+      console.error('[Server] Server listen error:', err);
+    }
+  });
+
+  server.listen(port, () => {
+    console.log(`COM Analyzer WebSocket server running on http://localhost:${port}`);
+  });
+}
+
+startListening(currentPort);
+
+module.exports = { server, wss, getPort: () => currentPort };

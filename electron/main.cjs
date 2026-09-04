@@ -6,6 +6,24 @@ if (app.setName) {
   app.setName('COM Analyzer');
 }
 
+// Ensure single instance to prevent EADDRINUSE conflicts
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  console.log('Another instance of COM Analyzer is already running. Focusing existing instance.');
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    const wins = Array.from(windows);
+    if (wins.length > 0) {
+      const mainWin = wins[0];
+      if (mainWin.isMinimized()) mainWin.restore();
+      mainWin.focus();
+    } else {
+      createWindow();
+    }
+  });
+}
+
 const windows = new Set();
 let serverStarted = false;
 
