@@ -66,6 +66,9 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [respDataHex, setRespDataHex] = useState<string>('00 F0 01 F4 00 0A 00 3C 00 1E 00 B4 00 1E 00 0A 00 32 00 96');
   const [autoByteCount, setAutoByteCount] = useState<boolean>(true);
   const [manualByteCount, setManualByteCount] = useState<number>(20);
+  const [sampleRegisterCount, setSampleRegisterCount] = useState<number>(10);
+  const [samplePattern, setSamplePattern] = useState<'incremental' | 'zeros' | 'random' | 'fixed'>('incremental');
+  const [sampleFixedValue, setSampleFixedValue] = useState<string>('0001');
 
   // Modbus Exception specific state
   const [exceptionCode, setExceptionCode] = useState<number>(2); // 02 Illegal Data Address
@@ -344,6 +347,46 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
       onAddToFavorites(currentPacket.hexStr, 'hex', label);
     }
     onClose();
+  };
+
+  // Generate Sample Registers / Bits for Modbus Response
+  const handleGenerateSampleData = (customCount?: number) => {
+    const qty = customCount !== undefined ? customCount : sampleRegisterCount;
+    const isBitMode = functionCode === 1 || functionCode === 2;
+
+    if (isBitMode) {
+      const numBytes = Math.ceil(Math.max(1, qty) / 8);
+      const bytes: string[] = [];
+      for (let i = 0; i < numBytes; i++) {
+        if (samplePattern === 'zeros') bytes.push('00');
+        else if (samplePattern === 'random') bytes.push(Math.floor(Math.random() * 256).toString(16).padStart(2, '0'));
+        else if (samplePattern === 'fixed') bytes.push(sampleFixedValue.slice(0, 2) || 'FF');
+        else bytes.push(((i + 1) % 256).toString(16).padStart(2, '0'));
+      }
+      setRespDataHex(bytes.join(' ').toUpperCase());
+    } else {
+      const chunks: string[] = [];
+      const cleanFixed = sampleFixedValue.replace(/[^0-9a-fA-F]/g, '').padStart(4, '0').slice(-4);
+      for (let i = 1; i <= Math.max(1, qty); i++) {
+        if (samplePattern === 'zeros') {
+          chunks.push('00 00');
+        } else if (samplePattern === 'random') {
+          const r = Math.floor(Math.random() * 65536);
+          const hi = ((r >> 8) & 0xFF).toString(16).padStart(2, '0');
+          const lo = (r & 0xFF).toString(16).padStart(2, '0');
+          chunks.push(`${hi} ${lo}`);
+        } else if (samplePattern === 'fixed') {
+          chunks.push(`${cleanFixed.slice(0, 2)} ${cleanFixed.slice(2, 4)}`);
+        } else {
+          // incremental (0001, 0002, ...)
+          const val = i & 0xFFFF;
+          const hi = ((val >> 8) & 0xFF).toString(16).padStart(2, '0');
+          const lo = (val & 0xFF).toString(16).padStart(2, '0');
+          chunks.push(`${hi} ${lo}`);
+        }
+      }
+      setRespDataHex(chunks.join(' ').toUpperCase());
+    }
   };
 
   // Insert Radix result into current active input
@@ -667,28 +710,6 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                             </div>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // 160 bytes AR147 standard sample
-                              setRespDataHex('00F001F4000A003C001E00B4001E000A00320096009600050005000500FA00FA00140014000500050005000A00020003000300010001000200020002000100020001000F000F00320032015E000100070100000105F0030C026C00960082006E00500032010400D2000A001E002D00030009001A000500200000000100EB020800260073006C002B002900BA00B6000100DC001400DC0014000F0001000500F8');
-                            }}
-                            className="px-2 py-0.5 rounded border text-[10px] font-semibold hover:bg-zinc-500/10"
-                          >
-                            160B 모니터링 샘플
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              // 10 registers sample (20 bytes)
-                              setRespDataHex('000100020003000400050006000700080009000A');
-                            }}
-                            className="px-2 py-0.5 rounded border text-[10px] hover:bg-zinc-500/10"
-                          >
-                            10개 레지스터 샘플
-                          </button>
-                        </div>
                       </div>
 
                       <textarea
@@ -698,6 +719,95 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                         placeholder="응답할 HEX 데이터를 띄어쓰기 또는 붙여서 입력하세요 (예: 00 F0 01 F4 ...)"
                         className="w-full p-2 border rounded font-mono text-xs bg-transparent uppercase"
                       />
+
+                      {/* Register Count & Pattern Sample Generator Tool */}
+                      <div className={`mt-2 p-2.5 rounded-md border flex flex-wrap items-center justify-between gap-2 text-xs ${
+                        isRetro ? 'bg-[#f4f4f4] border-[#808080]' : isDark ? 'bg-zinc-950/70 border-zinc-800' : 'bg-white border-zinc-200'
+                      }`}>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-[11px] text-amber-500 flex items-center gap-1">
+                            <Sparkles size={12} />
+                            샘플 자동 생성:
+                          </span>
+                          
+                          <div className="flex items-center gap-1">
+                            <span className="opacity-70 text-[11px]">
+                              {functionCode === 1 || functionCode === 2 ? '코일 수:' : '레지스터 수:'}
+                            </span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={functionCode === 1 || functionCode === 2 ? 2000 : 125}
+                              value={sampleRegisterCount}
+                              onChange={(e) => setSampleRegisterCount(Math.max(1, Math.min(2000, parseInt(e.target.value) || 1)))}
+                              className="w-14 p-1 border rounded font-mono text-xs text-center bg-transparent font-bold"
+                            />
+                            <span className="opacity-60 text-[11px]">개</span>
+                          </div>
+
+                          <div className="flex items-center gap-1">
+                            {[5, 10, 20, 50, 80].map((cnt) => (
+                              <button
+                                key={cnt}
+                                type="button"
+                                onClick={() => {
+                                  setSampleRegisterCount(cnt);
+                                  handleGenerateSampleData(cnt);
+                                }}
+                                className="px-1.5 py-0.5 rounded border text-[10px] font-mono hover:bg-zinc-500/10"
+                              >
+                                {cnt}개
+                              </button>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-700/40">
+                            <span className="opacity-70 text-[11px]">패턴:</span>
+                            <select
+                              value={samplePattern}
+                              onChange={(e: any) => setSamplePattern(e.target.value)}
+                              className="px-1.5 py-1 border rounded text-[11px] font-mono bg-transparent"
+                            >
+                              <option value="incremental">순차 증가 (0001, 0002...)</option>
+                              <option value="zeros">모두 0 (0000 0000...)</option>
+                              <option value="random">랜덤 바이트열</option>
+                              <option value="fixed">고정 값 반복</option>
+                            </select>
+                            {samplePattern === 'fixed' && (
+                              <input
+                                type="text"
+                                maxLength={4}
+                                value={sampleFixedValue}
+                                onChange={(e) => setSampleFixedValue(e.target.value)}
+                                placeholder="0001"
+                                className="w-14 p-1 border rounded font-mono text-xs uppercase text-center bg-transparent"
+                              />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateSampleData()}
+                            className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all"
+                          >
+                            <Sparkles size={11} />
+                            <span>{sampleRegisterCount}개 생성 적용</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSampleRegisterCount(80);
+                              setRespDataHex('00F001F4000A003C001E00B4001E000A00320096009600050005000500FA00FA00140014000500050005000A00020003000300010001000200020002000100020001000F000F00320032015E000100070100000105F0030C026C00960082006E00500032010400D2000A001E002D00030009001A000500200000000100EB020800260073006C002B002900BA00B6000100DC001400DC0014000F0001000500F8');
+                            }}
+                            className="px-2 py-1 rounded border text-[11px] font-semibold hover:bg-zinc-500/10 text-amber-400"
+                            title="AR147 160B 모니터링 표준 패킷"
+                          >
+                            AR147 160B(80개)
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
