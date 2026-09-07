@@ -820,6 +820,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({
         isOpen={isBuilderOpen}
         onClose={() => setIsBuilderOpen(false)}
         theme={theme}
+        lastRxPacket={lastRxPacket}
         onApplyToSend={(dataStr, fmt) => {
           setData(dataStr);
           setFormat(fmt);

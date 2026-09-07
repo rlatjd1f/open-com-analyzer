@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import type { AppTheme } from '../types';
+import type { AppTheme, Packet } from '../types';
 import {
   X,
   Wrench,
@@ -14,7 +14,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   AlertTriangle,
-  Network
+  Network,
+  Zap
 } from 'lucide-react';
 import {
   hexStringToBytes,
@@ -35,6 +36,7 @@ interface PacketBuilderModalProps {
   isOpen: boolean;
   onClose: () => void;
   theme: AppTheme;
+  lastRxPacket?: Packet | null;
   onApplyToSend: (data: string, format: 'hex' | 'ascii') => void;
   onDirectSend?: (data: string, format: 'hex' | 'ascii') => void;
   onAddToFavorites?: (data: string, format: 'hex' | 'ascii', label?: string) => void;
@@ -44,6 +46,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   isOpen,
   onClose,
   theme,
+  lastRxPacket,
   onApplyToSend,
   onDirectSend,
   onAddToFavorites
@@ -59,6 +62,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [includeModbusRtuCrc, setIncludeModbusRtuCrc] = useState<boolean>(true);
   const [tcpTransactionId, setTcpTransactionId] = useState<number>(1);
   const tcpProtocolId = 0; // 0x0000 Modbus Protocol
+  const [autoMapRxTid, setAutoMapRxTid] = useState<boolean>(true);
   const [modbusMsgType, setModbusMsgType] = useState<'request' | 'response' | 'exception'>('request');
   const [slaveId, setSlaveId] = useState<number>(1);
   const [functionCode, setFunctionCode] = useState<number>(3); // 03 Read Holding Registers
@@ -66,6 +70,74 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [quantity, setQuantity] = useState<number>(10);
   const [singleValue, setSingleValue] = useState<number>(0);
   const [modbusCrcOrder, setModbusCrcOrder] = useState<'lsb' | 'msb'>('lsb');
+
+  // Parse incoming Modbus TCP packet if available from lastRxPacket
+  const parsedRxModbusTcp = useMemo(() => {
+    if (!lastRxPacket || !lastRxPacket.bytes || lastRxPacket.bytes.length < 7) {
+      return null;
+    }
+    const b = lastRxPacket.bytes;
+    // Protocol ID in MBAP is 0x0000
+    const protoId = (b[2] << 8) | b[3];
+    if (protoId !== 0) return null;
+
+    const tid = (b[0] << 8) | b[1];
+    const len = (b[4] << 8) | b[5];
+    const unitId = b[6];
+    const fc = b.length > 7 ? b[7] : undefined;
+    const addr = b.length >= 10 ? (b[8] << 8) | b[9] : undefined;
+    const qtyOrVal = b.length >= 12 ? (b[10] << 8) | b[11] : undefined;
+
+    return {
+      tid,
+      tidHex: `0x${tid.toString(16).toUpperCase().padStart(4, '0')}`,
+      len,
+      unitId,
+      fc,
+      addr,
+      qtyOrVal,
+      timestamp: lastRxPacket.timestamp
+    };
+  }, [lastRxPacket]);
+
+  // Sync RX TID when new packet arrives or when switching to response/exception mode
+  useEffect(() => {
+    if (
+      autoMapRxTid &&
+      modbusProtocol === 'tcp' &&
+      parsedRxModbusTcp &&
+      (modbusMsgType === 'response' || modbusMsgType === 'exception')
+    ) {
+      setTcpTransactionId(parsedRxModbusTcp.tid);
+      if (parsedRxModbusTcp.unitId !== undefined) {
+        setSlaveId(parsedRxModbusTcp.unitId);
+      }
+      if (parsedRxModbusTcp.fc !== undefined && [1, 2, 3, 4, 5, 6, 15, 16].includes(parsedRxModbusTcp.fc)) {
+        setFunctionCode(parsedRxModbusTcp.fc);
+      }
+      if (parsedRxModbusTcp.addr !== undefined) {
+        setStartAddress(parsedRxModbusTcp.addr);
+      }
+      if (parsedRxModbusTcp.qtyOrVal !== undefined && parsedRxModbusTcp.qtyOrVal > 0 && parsedRxModbusTcp.qtyOrVal <= 125) {
+        setQuantity(parsedRxModbusTcp.qtyOrVal);
+        setSampleRegisterCount(parsedRxModbusTcp.qtyOrVal);
+      }
+    }
+  }, [parsedRxModbusTcp, autoMapRxTid, modbusProtocol, modbusMsgType]);
+
+  const handleSyncFromRx = () => {
+    if (!parsedRxModbusTcp) return;
+    setTcpTransactionId(parsedRxModbusTcp.tid);
+    if (parsedRxModbusTcp.unitId !== undefined) setSlaveId(parsedRxModbusTcp.unitId);
+    if (parsedRxModbusTcp.fc !== undefined && [1, 2, 3, 4, 5, 6, 15, 16].includes(parsedRxModbusTcp.fc)) {
+      setFunctionCode(parsedRxModbusTcp.fc);
+    }
+    if (parsedRxModbusTcp.addr !== undefined) setStartAddress(parsedRxModbusTcp.addr);
+    if (parsedRxModbusTcp.qtyOrVal !== undefined && parsedRxModbusTcp.qtyOrVal > 0 && parsedRxModbusTcp.qtyOrVal <= 125) {
+      setQuantity(parsedRxModbusTcp.qtyOrVal);
+      setSampleRegisterCount(parsedRxModbusTcp.qtyOrVal);
+    }
+  };
 
   // Modbus Response specific state
   const [respDataHex, setRespDataHex] = useState<string>('00 F0 01 F4 00 0A 00 3C 00 1E 00 B4 00 1E 00 0A 00 32 00 96');
@@ -619,23 +691,46 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                       <Network size={13} />
                       <span>MBAP 헤더 구성 (총 7 바이트)</span>
                     </span>
-                    <span className="text-[10px] opacity-70">
-                      * 길이(Length) 필드는 페이로드 크기에 따라 실시간 자동 계산됩니다 (Unit ID 1B + PDU 바이트 수)
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {parsedRxModbusTcp ? (
+                        <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          <Zap size={10} />
+                          최근 수신 요청: TID {parsedRxModbusTcp.tidHex} (Unit {parsedRxModbusTcp.unitId}, FC {parsedRxModbusTcp.fc ? `0${parsedRxModbusTcp.fc}`.slice(-2) : '?'})
+                        </span>
+                      ) : (
+                        <span className="text-[10px] opacity-70">
+                          * 길이(Length) 필드는 페이로드 크기에 따라 실시간 자동 계산됩니다 (Unit ID 1B + PDU 바이트 수)
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs">
                     {/* Transaction ID */}
                     <div className="p-2 rounded bg-black/20 border border-zinc-700/40">
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-[11px]">트랜잭션 ID (2B)</span>
-                        <button
-                          type="button"
-                          onClick={() => setTcpTransactionId((prev) => (prev + 1) & 0xFFFF)}
-                          className="text-[10px] text-blue-400 hover:underline"
-                          title="트랜잭션 ID 1 증가"
-                        >
-                          +1 증가
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {parsedRxModbusTcp && (
+                            <button
+                              type="button"
+                              onClick={handleSyncFromRx}
+                              className="text-[10px] text-emerald-400 hover:underline flex items-center gap-0.5 font-sans"
+                              title="수신된 요청의 TID 및 파라미터 매핑"
+                            >
+                              <Zap size={10} /> 수신TID 매핑
+                            </button>
+                          )}
+                          {modbusMsgType === 'request' && (
+                            <button
+                              type="button"
+                              onClick={() => setTcpTransactionId((prev) => (prev + 1) & 0xFFFF)}
+                              className="text-[10px] text-blue-400 hover:underline"
+                              title="트랜잭션 ID 1 증가"
+                            >
+                              +1 증가
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <input
@@ -650,6 +745,24 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                           0x{tcpTransactionId.toString(16).toUpperCase().padStart(4, '0')}
                         </span>
                       </div>
+                      {(modbusMsgType === 'response' || modbusMsgType === 'exception') && (
+                        <div className="mt-1.5 pt-1 border-t border-zinc-700/30 flex items-center justify-between text-[10px]">
+                          <label className="flex items-center gap-1 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                            <input
+                              type="checkbox"
+                              checked={autoMapRxTid}
+                              onChange={(e) => setAutoMapRxTid(e.target.checked)}
+                              className="rounded"
+                            />
+                            <span>요청 TID 자동 매핑</span>
+                          </label>
+                          {parsedRxModbusTcp && tcpTransactionId === parsedRxModbusTcp.tid && (
+                            <span className="text-emerald-400 font-semibold flex items-center gap-0.5">
+                              ✓ 매핑됨
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Protocol ID */}
