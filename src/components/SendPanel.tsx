@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AppTheme, Packet } from '../types';
 import { Send, Play, Square, Zap, Star, Clock, Trash2, Plus, ChevronDown, Edit3, Wrench } from 'lucide-react';
 import { PacketBuilderModal } from './PacketBuilderModal';
+import { hexStringToBytes, bytesToHexString } from '../utils/crc';
 
 interface FavoritePacket {
   id: string;
@@ -291,9 +292,27 @@ export const SendPanel: React.FC<SendPanelProps> = ({
     if (lastRxPacket.id === lastProcessedRxId.current) return;
     lastProcessedRxId.current = lastRxPacket.id;
 
-    const toSend = dataRef.current;
+    let toSend = dataRef.current;
     const fmt = formatRef.current;
     const delay = rxTriggerDelayRef.current;
+
+    // Modbus TCP Transaction ID dynamic mapping:
+    // If we are sending in HEX format and the received RX is a Modbus TCP frame (length >= 7, protoId === 0),
+    // and the outgoing data in the input box is also a Modbus TCP frame (length >= 7, protoId === 0),
+    // dynamically copy the incoming TID (bytes 0, 1) into the outgoing packet and update the input state.
+    if (fmt === 'hex' && lastRxPacket.bytes && lastRxPacket.bytes.length >= 7) {
+      const rxBytes = lastRxPacket.bytes;
+      const rxProtoId = (rxBytes[2] << 8) | rxBytes[3];
+      if (rxProtoId === 0) {
+        const txBytes = Array.from(hexStringToBytes(toSend));
+        if (txBytes.length >= 7 && txBytes[2] === 0 && txBytes[3] === 0) {
+          txBytes[0] = rxBytes[0];
+          txBytes[1] = rxBytes[1];
+          toSend = bytesToHexString(txBytes);
+          setData(toSend);
+        }
+      }
+    }
 
     if (delay > 0) {
       const dTimer = setTimeout(() => {
