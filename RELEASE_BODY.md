@@ -1,21 +1,14 @@
-## ⚡️ Open COM Analyzer v0.0.11
+## ⚡️ Open COM Analyzer v0.0.12
 
-Open COM Analyzer v0.0.11 버전에서는 Modbus TCP 통신 규격에 맞추어 마스터로부터 수신된 요청의 트랜잭션 ID(TID) 및 요청 파라미터를 응답 생성기에 실시간으로 자동 매핑해 주는 스마트 동기화 시스템이 추가되었습니다.
-
----
-
-### [✨ 신규 기능]
-* **📥 Modbus TCP 수신 요청 트랜잭션 ID(TID) 실시간 자동 매핑**
-  - 마스터(클라이언트)로부터 Modbus TCP 요청 패킷이 수신되었을 때, 슬레이브 응답(`Response`) 및 예외 응답(`Exception`) 생성 시 수신된 MBAP 트랜잭션 ID(TID)가 자동으로 1:1 일치하도록 동기화됩니다.
-  - TID뿐만 아니라 수신된 요청의 **Unit ID (국번)**, **기능 코드 (Function Code)**, **시작 주소 (Start Address)**, **요청 레지스터 개수 (Quantity)** 까지 응답 파라미터에 실시간으로 자동 적용됩니다.
+Open COM Analyzer v0.0.12 버전에서는 Modbus TCP 통신 시 마스터로부터 요청이 들어왔을 때 `RX 반응발송` 기능이 요청 패킷의 트랜잭션 ID(Transaction ID, TID)를 실시간으로 자동 동기화하여 응답하도록 개선되었습니다.
 
 ---
 
-### [🎨 UI/UX 편의성 향상]
-* **MBAP 헤더 내 수신 TID 상태 표시 및 제어 옵션**
-  - **수신 요청 정보 배지**: 최근 수신된 요청 패킷의 TID, Unit ID, 기능 코드를 헤더 상단에 실시간으로 안내합니다.
-  - **`[⚡️ 수신TID 매핑]` 원클릭 버튼**: 수신된 요청의 TID 및 파라미터를 즉시 가져와 적용할 수 있습니다.
-  - **`☑️ 요청 TID 자동 매핑` 체크박스 및 `✓ 매핑됨` 상태 배지**: 자동 동기화 활성화 여부를 손쉽게 제어하고 매핑 상태를 직관적으로 확인할 수 있습니다.
+### [🛠 버그 수정 및 안정성 개선]
+* **📥 Modbus TCP RX 반응발송 시 요청 TID 실시간 자동 매핑**
+  - `[RX 반응발송 ON]` 모드 실행 시, 수신된 Modbus TCP 요청 프레임의 Transaction ID(MBAP 헤더 바이트 0~1)를 발송 응답 패킷에 실시간으로 동적 매핑하여 전송합니다.
+  - 마스터(요청자)의 TID가 증가하거나 변경되더라도 슬레이브 응답 패킷의 TID가 1:1로 정확하게 일치하여 응답되도록 보장합니다.
+  - 발송 입력창의 HEX 데이터도 수신된 최신 TID로 동기화되어 실시간 전송 상태를 즉시 확인할 수 있습니다.
 
 ---
 
@@ -34,4 +27,4 @@ xattr -cr "/Applications/COM Analyzer.app"
 xattr -cr ~/Downloads/"COM Analyzer.app"
 ```
 
-**전체 커밋 비교**: https://github.com/rlatjd1f/open-com-analyzer/compare/v0.0.10...v0.0.11
+**전체 커밋 비교**: https://github.com/rlatjd1f/open-com-analyzer/compare/v0.0.11...v0.0.12
