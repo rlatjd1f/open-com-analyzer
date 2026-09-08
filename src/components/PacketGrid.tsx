@@ -1,6 +1,6 @@
 import React, { useState, useRef, useLayoutEffect, useCallback, memo } from 'react';
 import type { Packet, AppTheme } from '../types';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Search } from 'lucide-react';
 
 interface PacketRowProps {
   pkt: Packet;
@@ -9,6 +9,7 @@ interface PacketRowProps {
   themeName: string;
   onHoverByte: (e: React.MouseEvent, info: { byte: number; idx: number; direction: 'rx' | 'tx'; timestamp: number }) => void;
   onLeaveByte: () => void;
+  onInspectPacket?: (pkt: Packet) => void;
 }
 
 // 1. Memoized Single Packet Row: Isolates render cycle to this row only
@@ -18,7 +19,8 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
   txDisplayMode,
   themeName,
   onHoverByte,
-  onLeaveByte
+  onLeaveByte,
+  onInspectPacket
 }) => {
   const isRx = pkt.direction === 'rx';
   const displayMode = isRx ? rxDisplayMode : txDisplayMode;
@@ -44,6 +46,20 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
     setCopied(true);
     setTimeout(() => setCopied(false), 1200);
   }, [pkt]);
+
+  const handleInspectClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onInspectPacket) {
+      onInspectPacket(pkt);
+    }
+  }, [onInspectPacket, pkt]);
+
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onInspectPacket) {
+      onInspectPacket(pkt);
+    }
+  }, [onInspectPacket, pkt]);
 
   if (pkt.direction === 'system') {
     return (
@@ -80,7 +96,8 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
     <div
       style={{ contain: 'layout style paint' }}
       onClick={handleCopyPacket}
-      title="클릭 시 전체 패킷(HEX) 복사"
+      onDoubleClick={handleDoubleClick}
+      title="클릭 시 전체 복사 / 더블클릭 시 프로토콜 상세 분석"
       className={`group relative flex items-start gap-2 p-1.5 rounded will-change-transform cursor-pointer transition-all ${
         copied
           ? 'ring-2 ring-emerald-500 bg-emerald-500/10 shadow-md'
@@ -91,8 +108,8 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
           : 'bg-white/80 border border-zinc-200/80 shadow-sm hover:bg-zinc-100 hover:border-zinc-300'
       }`}
     >
-      {/* 1. Left Fixed-Width Column: Timestamp [HH:mm:ss.SSS] + RX/TX + Length + Copy Badge */}
-      <div className="w-[265px] min-w-[265px] max-w-[265px] shrink-0 flex items-center justify-between pt-0.5 select-none pr-2 border-r border-white/20 dark:border-zinc-700/60 gap-1.5">
+      {/* 1. Left Fixed-Width Column: Timestamp [HH:mm:ss.SSS] + RX/TX + Length + Action Badges */}
+      <div className="w-[285px] min-w-[285px] max-w-[285px] shrink-0 flex items-center justify-between pt-0.5 select-none pr-2 border-r border-white/20 dark:border-zinc-700/60 gap-1.5">
         {/* Timestamp HH:mm:ss.SSS */}
         <span
           className={`font-mono text-[12px] font-bold px-1.5 py-0.5 rounded text-center tracking-tight ${
@@ -119,7 +136,7 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
 
         {/* High-Contrast Byte Count Badge */}
         <span
-          className={`min-w-[44px] px-1.5 py-0.5 rounded font-mono text-[11px] font-bold text-center tracking-tight shadow-sm ${
+          className={`min-w-[42px] px-1 py-0.5 rounded font-mono text-[11px] font-bold text-center tracking-tight shadow-sm ${
             isRetro
               ? 'bg-[#15213b] text-[#55f2ff] border border-[#6d8bc9]'
               : isDark
@@ -130,26 +147,41 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
           {pkt.length} B
         </span>
 
-        {/* Copy Indicator Badge */}
-        <div
-          className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded transition-all shadow-xs ${
-            copied
-              ? 'bg-emerald-600 text-white scale-105'
-              : 'opacity-0 group-hover:opacity-100 bg-black/30 dark:bg-zinc-800/90 text-zinc-300 hover:text-white border border-white/20 dark:border-zinc-600'
-          }`}
-          title="클릭 시 전체 패킷 복사"
-        >
-          {copied ? (
-            <>
-              <Check size={11} className="text-white shrink-0" />
-              <span className="text-[10px] font-sans">복사됨!</span>
-            </>
-          ) : (
-            <>
-              <Copy size={11} className="shrink-0" />
-              <span className="text-[10px] font-sans">복사</span>
-            </>
+        {/* Action Badges Group (Inspect + Copy) */}
+        <div className="flex items-center gap-1">
+          {/* Inspect Button */}
+          {onInspectPacket && (
+            <button
+              onClick={handleInspectClick}
+              className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-600/90 text-white hover:bg-indigo-500 shadow-xs border border-indigo-400/50 transition-all"
+              title="패킷 프로토콜 상세 분석 팝업 (더블 클릭 가능)"
+            >
+              <Search size={10} className="shrink-0" />
+              <span className="font-sans">분석</span>
+            </button>
           )}
+
+          {/* Copy Indicator Badge */}
+          <div
+            className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded transition-all shadow-xs ${
+              copied
+                ? 'bg-emerald-600 text-white scale-105'
+                : 'opacity-0 group-hover:opacity-100 bg-black/30 dark:bg-zinc-800/90 text-zinc-300 hover:text-white border border-white/20 dark:border-zinc-600'
+            }`}
+            title="클릭 시 전체 패킷 복사"
+          >
+            {copied ? (
+              <>
+                <Check size={11} className="text-white shrink-0" />
+                <span className="text-[10px] font-sans">복사됨!</span>
+              </>
+            ) : (
+              <>
+                <Copy size={11} className="shrink-0" />
+                <span className="text-[10px] font-sans">복사</span>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -200,6 +232,7 @@ interface PacketGridProps {
   txDisplayMode: 'ascii' | 'binary';
   theme: AppTheme;
   autoScroll: boolean;
+  onInspectPacket?: (pkt: Packet) => void;
 }
 
 export const PacketGrid: React.FC<PacketGridProps> = ({
@@ -207,7 +240,8 @@ export const PacketGrid: React.FC<PacketGridProps> = ({
   rxDisplayMode,
   txDisplayMode,
   theme,
-  autoScroll
+  autoScroll,
+  onInspectPacket
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -284,6 +318,7 @@ export const PacketGrid: React.FC<PacketGridProps> = ({
               themeName={theme.name}
               onHoverByte={handleHoverByte}
               onLeaveByte={handleLeaveByte}
+              onInspectPacket={onInspectPacket}
             />
           ))
         )}

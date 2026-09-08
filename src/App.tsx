@@ -8,6 +8,7 @@ import { UtilityPanel } from './components/UtilityPanel';
 import { SettingsModal } from './components/SettingsModal';
 import { HelpModal } from './components/HelpModal';
 import { UpdateModal, type UpdateInfo } from './components/UpdateModal';
+import { PacketInspectorModal } from './components/PacketInspectorModal';
 import {
   type Packet,
   type ConnectionStatus,
@@ -66,6 +67,7 @@ export const App: React.FC = () => {
   const [settingsTab, setSettingsTab] = useState<'tcp' | 'serial' | 'virtual' | 'theme' | 'buffer'>('tcp');
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [insertedData, setInsertedData] = useState('');
+  const [inspectingPacket, setInspectingPacket] = useState<Packet | null>(null);
 
   // Auto-Update States
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
@@ -612,6 +614,7 @@ export const App: React.FC = () => {
           txDisplayMode={txMode}
           theme={theme}
           autoScroll={autoScroll}
+          onInspectPacket={(pkt) => setInspectingPacket(pkt)}
         />
 
         <ControlSidebar
@@ -699,6 +702,15 @@ export const App: React.FC = () => {
         statusMessage={updateStatusMessage}
         onStartUpdate={handleStartUpdate}
         onCheckForUpdates={() => handleCheckForUpdates(true)}
+      />
+
+      {/* Packet Inspector Modal */}
+      <PacketInspectorModal
+        isOpen={!!inspectingPacket}
+        onClose={() => setInspectingPacket(null)}
+        theme={theme}
+        packet={inspectingPacket}
+        onApplyToSend={(dataStr) => setInsertedData(dataStr)}
       />
     </div>
   );
