@@ -1,5 +1,6 @@
 import React, { useState, useRef, useLayoutEffect, useCallback, memo } from 'react';
 import type { Packet, AppTheme } from '../types';
+import { Copy, Check } from 'lucide-react';
 
 interface PacketRowProps {
   pkt: Packet;
@@ -23,6 +24,7 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
   const displayMode = isRx ? rxDisplayMode : txDisplayMode;
   const isRetro = themeName === 'classic-retro';
   const isDark = themeName === 'modern-dark';
+  const [copied, setCopied] = useState(false);
 
   // Format timestamp once per packet
   const formatTimestamp = (ts: number) => {
@@ -33,6 +35,15 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
     const sss = String(d.getMilliseconds()).padStart(3, '0');
     return `${hh}:${mm}:${ss}.${sss}`;
   };
+
+  const handleCopyPacket = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    const hexData = pkt.hex || pkt.bytes.map(b => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+    if (!hexData) return;
+    navigator.clipboard.writeText(hexData);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  }, [pkt]);
 
   if (pkt.direction === 'system') {
     return (
@@ -68,16 +79,20 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
   return (
     <div
       style={{ contain: 'layout style paint' }}
-      className={`flex items-start gap-2 p-1.5 rounded will-change-transform ${
-        isRetro
-          ? 'bg-[#435388]/60 border border-[#6b7fa9]/50 shadow-sm'
+      onClick={handleCopyPacket}
+      title="클릭 시 전체 패킷(HEX) 복사"
+      className={`group relative flex items-start gap-2 p-1.5 rounded will-change-transform cursor-pointer transition-all ${
+        copied
+          ? 'ring-2 ring-emerald-500 bg-emerald-500/10 shadow-md'
+          : isRetro
+          ? 'bg-[#435388]/60 border border-[#6b7fa9]/50 shadow-sm hover:bg-[#4e609c] hover:border-white/40'
           : isDark
-          ? 'bg-zinc-900/60 border border-zinc-800/80 shadow-sm hover:bg-zinc-900/90'
-          : 'bg-white/80 border border-zinc-200/80 shadow-sm hover:bg-white'
+          ? 'bg-zinc-900/60 border border-zinc-800/80 shadow-sm hover:bg-zinc-800/80 hover:border-zinc-700'
+          : 'bg-white/80 border border-zinc-200/80 shadow-sm hover:bg-zinc-100 hover:border-zinc-300'
       }`}
     >
-      {/* 1. Left Fixed-Width Column: Timestamp [HH:mm:ss.SSS] + RX/TX + Length */}
-      <div className="w-[215px] min-w-[215px] max-w-[215px] shrink-0 flex items-center justify-between pt-0.5 select-none pr-2 border-r border-white/20 dark:border-zinc-700/60">
+      {/* 1. Left Fixed-Width Column: Timestamp [HH:mm:ss.SSS] + RX/TX + Length + Copy Badge */}
+      <div className="w-[265px] min-w-[265px] max-w-[265px] shrink-0 flex items-center justify-between pt-0.5 select-none pr-2 border-r border-white/20 dark:border-zinc-700/60 gap-1.5">
         {/* Timestamp HH:mm:ss.SSS */}
         <span
           className={`font-mono text-[12px] font-bold px-1.5 py-0.5 rounded text-center tracking-tight ${
@@ -114,6 +129,28 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
         >
           {pkt.length} B
         </span>
+
+        {/* Copy Indicator Badge */}
+        <div
+          className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded transition-all shadow-xs ${
+            copied
+              ? 'bg-emerald-600 text-white scale-105'
+              : 'opacity-0 group-hover:opacity-100 bg-black/30 dark:bg-zinc-800/90 text-zinc-300 hover:text-white border border-white/20 dark:border-zinc-600'
+          }`}
+          title="클릭 시 전체 패킷 복사"
+        >
+          {copied ? (
+            <>
+              <Check size={11} className="text-white shrink-0" />
+              <span className="text-[10px] font-sans">복사됨!</span>
+            </>
+          ) : (
+            <>
+              <Copy size={11} className="shrink-0" />
+              <span className="text-[10px] font-sans">복사</span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* 2. Right Column: Perfectly Aligned Square Byte Cells */}
