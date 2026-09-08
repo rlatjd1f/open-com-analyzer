@@ -1231,9 +1231,10 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                       />
 
                       {/* Register Count & Pattern Sample Generator Tool */}
-                      <div className={`mt-2 p-2.5 rounded-md border flex flex-wrap items-center justify-between gap-2 text-xs ${
+                      <div className={`mt-2 p-2.5 rounded-md border flex flex-col gap-2 text-xs ${
                         isRetro ? 'bg-[#f4f4f4] border-[#808080]' : isDark ? 'bg-zinc-950/70 border-zinc-800' : 'bg-white border-zinc-200'
                       }`}>
+                        {/* Row 1: Quantity inputs & Preset count buttons */}
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-[11px] text-amber-500 flex items-center gap-1">
                             <Sparkles size={12} />
@@ -1273,15 +1274,18 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                               </button>
                             ))}
                           </div>
+                        </div>
 
+                        {/* Row 2: Order (for 4-byte mode) & Pattern settings */}
+                        <div className="flex flex-wrap items-center gap-3 pt-1.5 border-t border-zinc-700/30 dark:border-zinc-800">
                           {/* 4-Byte Mode Endianness Selector */}
                           {registerSize === 4 && (functionCode === 3 || functionCode === 4) && (
-                            <div className="flex items-center gap-1 pl-2 border-l border-zinc-700/40">
-                              <span className="opacity-70 text-[11px]">순서:</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="opacity-70 text-[11px] font-semibold">순서:</span>
                               <select
                                 value={fourByteEndian}
                                 onChange={(e: any) => setFourByteEndian(e.target.value)}
-                                className="px-1.5 py-1 border rounded text-[11px] font-mono bg-transparent font-semibold text-blue-400"
+                                className="px-2 py-1 border rounded text-[11px] font-mono bg-transparent font-semibold text-blue-400"
                                 title="32-bit 바이트/워드 순서 (Endianness)"
                               >
                                 <option value="ABCD">ABCD (Big-Endian 표준)</option>
@@ -1292,12 +1296,13 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                             </div>
                           )}
 
-                          <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-700/40">
-                            <span className="opacity-70 text-[11px]">패턴:</span>
+                          {/* Pattern Selector */}
+                          <div className="flex items-center gap-1.5">
+                            <span className="opacity-70 text-[11px] font-semibold">패턴:</span>
                             <select
                               value={samplePattern}
                               onChange={(e: any) => setSamplePattern(e.target.value)}
-                              className="px-1.5 py-1 border rounded text-[11px] font-mono bg-transparent"
+                              className="px-2 py-1 border rounded text-[11px] font-mono bg-transparent"
                             >
                               <option value="incremental">순차 증가 ({registerSize === 4 ? '00000001, 00000002...' : '0001, 0002...'})</option>
                               <option value="zeros">모두 0 ({registerSize === 4 ? '00000000...' : '0000 0000...'})</option>
@@ -1314,20 +1319,21 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                                 value={sampleFixedValue}
                                 onChange={(e) => setSampleFixedValue(e.target.value)}
                                 placeholder={registerSize === 4 ? '00000001' : '0001'}
-                                className="w-20 p-1 border rounded font-mono text-xs uppercase text-center bg-transparent"
+                                className="w-24 p-1 border rounded font-mono text-xs uppercase text-center bg-transparent font-semibold"
                               />
                             )}
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-1.5">
+                        {/* Row 3: Action & Preset buttons */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-zinc-700/30 dark:border-zinc-800">
                           <button
                             type="button"
                             onClick={() => handleGenerateSampleData()}
-                            className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all"
+                            className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all"
                           >
                             <Sparkles size={11} />
-                            <span>{sampleRegisterCount}개 ({sampleRegisterCount * registerSize}B) 생성 적용</span>
+                            <span>{sampleRegisterCount}개 ({sampleRegisterCount * (functionCode === 1 || functionCode === 2 ? 1 : registerSize)}B) 생성 적용</span>
                           </button>
                           <button
                             type="button"
@@ -1336,7 +1342,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                               setSampleRegisterCount(80);
                               setRespDataHex('00F001F4000A003C001E00B4001E000A00320096009600050005000500FA00FA00140014000500050005000A00020003000300010001000200020002000100020001000F000F00320032015E000100070100000105F0030C026C00960082006E00500032010400D2000A001E002D00030009001A000500200000000100EB020800260073006C002B002900BA00B6000100DC001400DC0014000F0001000500F8');
                             }}
-                            className="px-2 py-1 rounded border text-[11px] font-semibold hover:bg-zinc-500/10 text-amber-400"
+                            className="px-2.5 py-1 rounded border text-[11px] font-semibold hover:bg-zinc-500/10 text-amber-400"
                             title="80개 레지스터 (160바이트) 다중 데이터 샘플"
                           >
                             80개 (160B) 샘플
