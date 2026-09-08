@@ -62,7 +62,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [includeModbusRtuCrc, setIncludeModbusRtuCrc] = useState<boolean>(true);
   const [tcpTransactionId, setTcpTransactionId] = useState<number>(1);
   const tcpProtocolId = 0; // 0x0000 Modbus Protocol
-  const [autoMapRxTid, setAutoMapRxTid] = useState<boolean>(true);
+  const [autoMapRxParams, setAutoMapRxParams] = useState<boolean>(true);
   const [modbusMsgType, setModbusMsgType] = useState<'request' | 'response' | 'exception'>('request');
   const [slaveId, setSlaveId] = useState<number>(1);
   const [functionCode, setFunctionCode] = useState<number>(3); // 03 Read Holding Registers
@@ -100,14 +100,36 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
     };
   }, [lastRxPacket]);
 
-  // Sync RX TID when new packet arrives or when switching to response/exception mode
+  // Parse incoming Modbus RTU packet if available from lastRxPacket
+  const parsedRxModbusRtu = useMemo(() => {
+    if (!lastRxPacket || !lastRxPacket.bytes || lastRxPacket.bytes.length < 4) {
+      return null;
+    }
+    const b = lastRxPacket.bytes;
+    // Exclude Modbus TCP MBAP packet
+    if (b.length >= 7 && b[2] === 0 && b[3] === 0) return null;
+
+    const slaveId = b[0];
+    const fc = b[1];
+    if (![1, 2, 3, 4, 5, 6, 15, 16].includes(fc)) return null;
+
+    const addr = b.length >= 4 ? (b[2] << 8) | b[3] : undefined;
+    const qtyOrVal = b.length >= 6 ? (b[4] << 8) | b[5] : undefined;
+
+    return {
+      slaveId,
+      fc,
+      addr,
+      qtyOrVal,
+      timestamp: lastRxPacket.timestamp
+    };
+  }, [lastRxPacket]);
+
+  // Sync RX Parameters (TID, Slave/Unit ID, Function Code, Address, Quantity/Value)
   useEffect(() => {
-    if (
-      autoMapRxTid &&
-      modbusProtocol === 'tcp' &&
-      parsedRxModbusTcp &&
-      (modbusMsgType === 'response' || modbusMsgType === 'exception')
-    ) {
+    if (!autoMapRxParams || (modbusMsgType !== 'response' && modbusMsgType !== 'exception')) return;
+
+    if (modbusProtocol === 'tcp' && parsedRxModbusTcp) {
       setTcpTransactionId(parsedRxModbusTcp.tid);
       if (parsedRxModbusTcp.unitId !== undefined) {
         setSlaveId(parsedRxModbusTcp.unitId);
@@ -118,24 +140,65 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
       if (parsedRxModbusTcp.addr !== undefined) {
         setStartAddress(parsedRxModbusTcp.addr);
       }
-      if (parsedRxModbusTcp.qtyOrVal !== undefined && parsedRxModbusTcp.qtyOrVal > 0 && parsedRxModbusTcp.qtyOrVal <= 125) {
-        setQuantity(parsedRxModbusTcp.qtyOrVal);
-        setSampleRegisterCount(parsedRxModbusTcp.qtyOrVal);
+      if (parsedRxModbusTcp.qtyOrVal !== undefined) {
+        if (parsedRxModbusTcp.fc === 5 || parsedRxModbusTcp.fc === 6) {
+          setSingleValue(parsedRxModbusTcp.qtyOrVal);
+        } else if (parsedRxModbusTcp.qtyOrVal > 0 && parsedRxModbusTcp.qtyOrVal <= 125) {
+          setQuantity(parsedRxModbusTcp.qtyOrVal);
+          setSampleRegisterCount(parsedRxModbusTcp.qtyOrVal);
+        }
+      }
+    } else if (modbusProtocol === 'rtu' && parsedRxModbusRtu) {
+      if (parsedRxModbusRtu.slaveId !== undefined) {
+        setSlaveId(parsedRxModbusRtu.slaveId);
+      }
+      if (parsedRxModbusRtu.fc !== undefined && [1, 2, 3, 4, 5, 6, 15, 16].includes(parsedRxModbusRtu.fc)) {
+        setFunctionCode(parsedRxModbusRtu.fc);
+      }
+      if (parsedRxModbusRtu.addr !== undefined) {
+        setStartAddress(parsedRxModbusRtu.addr);
+      }
+      if (parsedRxModbusRtu.qtyOrVal !== undefined) {
+        if (parsedRxModbusRtu.fc === 5 || parsedRxModbusRtu.fc === 6) {
+          setSingleValue(parsedRxModbusRtu.qtyOrVal);
+        } else if (parsedRxModbusRtu.qtyOrVal > 0 && parsedRxModbusRtu.qtyOrVal <= 125) {
+          setQuantity(parsedRxModbusRtu.qtyOrVal);
+          setSampleRegisterCount(parsedRxModbusRtu.qtyOrVal);
+        }
       }
     }
-  }, [parsedRxModbusTcp, autoMapRxTid, modbusProtocol, modbusMsgType]);
+  }, [parsedRxModbusTcp, parsedRxModbusRtu, autoMapRxParams, modbusProtocol, modbusMsgType]);
 
   const handleSyncFromRx = () => {
-    if (!parsedRxModbusTcp) return;
-    setTcpTransactionId(parsedRxModbusTcp.tid);
-    if (parsedRxModbusTcp.unitId !== undefined) setSlaveId(parsedRxModbusTcp.unitId);
-    if (parsedRxModbusTcp.fc !== undefined && [1, 2, 3, 4, 5, 6, 15, 16].includes(parsedRxModbusTcp.fc)) {
-      setFunctionCode(parsedRxModbusTcp.fc);
-    }
-    if (parsedRxModbusTcp.addr !== undefined) setStartAddress(parsedRxModbusTcp.addr);
-    if (parsedRxModbusTcp.qtyOrVal !== undefined && parsedRxModbusTcp.qtyOrVal > 0 && parsedRxModbusTcp.qtyOrVal <= 125) {
-      setQuantity(parsedRxModbusTcp.qtyOrVal);
-      setSampleRegisterCount(parsedRxModbusTcp.qtyOrVal);
+    if (modbusProtocol === 'tcp' && parsedRxModbusTcp) {
+      setTcpTransactionId(parsedRxModbusTcp.tid);
+      if (parsedRxModbusTcp.unitId !== undefined) setSlaveId(parsedRxModbusTcp.unitId);
+      if (parsedRxModbusTcp.fc !== undefined && [1, 2, 3, 4, 5, 6, 15, 16].includes(parsedRxModbusTcp.fc)) {
+        setFunctionCode(parsedRxModbusTcp.fc);
+      }
+      if (parsedRxModbusTcp.addr !== undefined) setStartAddress(parsedRxModbusTcp.addr);
+      if (parsedRxModbusTcp.qtyOrVal !== undefined) {
+        if (parsedRxModbusTcp.fc === 5 || parsedRxModbusTcp.fc === 6) {
+          setSingleValue(parsedRxModbusTcp.qtyOrVal);
+        } else if (parsedRxModbusTcp.qtyOrVal > 0 && parsedRxModbusTcp.qtyOrVal <= 125) {
+          setQuantity(parsedRxModbusTcp.qtyOrVal);
+          setSampleRegisterCount(parsedRxModbusTcp.qtyOrVal);
+        }
+      }
+    } else if (modbusProtocol === 'rtu' && parsedRxModbusRtu) {
+      if (parsedRxModbusRtu.slaveId !== undefined) setSlaveId(parsedRxModbusRtu.slaveId);
+      if (parsedRxModbusRtu.fc !== undefined && [1, 2, 3, 4, 5, 6, 15, 16].includes(parsedRxModbusRtu.fc)) {
+        setFunctionCode(parsedRxModbusRtu.fc);
+      }
+      if (parsedRxModbusRtu.addr !== undefined) setStartAddress(parsedRxModbusRtu.addr);
+      if (parsedRxModbusRtu.qtyOrVal !== undefined) {
+        if (parsedRxModbusRtu.fc === 5 || parsedRxModbusRtu.fc === 6) {
+          setSingleValue(parsedRxModbusRtu.qtyOrVal);
+        } else if (parsedRxModbusRtu.qtyOrVal > 0 && parsedRxModbusRtu.qtyOrVal <= 125) {
+          setQuantity(parsedRxModbusRtu.qtyOrVal);
+          setSampleRegisterCount(parsedRxModbusRtu.qtyOrVal);
+        }
+      }
     }
   };
 
@@ -681,6 +744,57 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                 )}
               </div>
 
+              {/* Modbus RTU: RX Sync Controls */}
+              {modbusProtocol === 'rtu' && (modbusMsgType === 'response' || modbusMsgType === 'exception') && (
+                <div className={`p-2.5 rounded-lg border flex flex-wrap items-center justify-between gap-2 ${
+                  isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-emerald-950/20 border-emerald-800/40' : 'bg-emerald-50/60 border-emerald-200'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-emerald-400 flex items-center gap-1">
+                      <Cpu size={13} />
+                      <span>Modbus RTU 수신 동기화:</span>
+                    </span>
+                    {parsedRxModbusRtu ? (
+                      <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        <Zap size={10} />
+                        최근 수신 요청: Slave {parsedRxModbusRtu.slaveId}, FC {parsedRxModbusRtu.fc ? `0${parsedRxModbusRtu.fc}`.slice(-2) : '?'}
+                        {parsedRxModbusRtu.addr !== undefined ? ` (Addr 0x${parsedRxModbusRtu.addr.toString(16).toUpperCase().padStart(4, '0')})` : ''}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] opacity-70">
+                        * 마스터로부터 수신된 요청의 국번, 기능 코드(FC), 주소 등이 응답에 자동 매핑됩니다
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px]">
+                    {parsedRxModbusRtu && (
+                      <button
+                        type="button"
+                        onClick={handleSyncFromRx}
+                        className="text-[10px] text-emerald-400 hover:underline flex items-center gap-0.5 font-sans"
+                        title="수신된 요청의 파라미터 즉시 매핑"
+                      >
+                        <Zap size={10} /> 수신값 즉시 매핑
+                      </button>
+                    )}
+                    <label className="flex items-center gap-1 cursor-pointer text-zinc-400 hover:text-zinc-200">
+                      <input
+                        type="checkbox"
+                        checked={autoMapRxParams}
+                        onChange={(e) => setAutoMapRxParams(e.target.checked)}
+                        className="rounded"
+                      />
+                      <span>요청 FC/파라미터 자동 매핑</span>
+                    </label>
+                    {parsedRxModbusRtu && functionCode === parsedRxModbusRtu.fc && slaveId === parsedRxModbusRtu.slaveId && (
+                      <span className="text-emerald-400 font-semibold flex items-center gap-0.5 text-[10px]">
+                        ✓ 매핑됨
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Modbus TCP: MBAP Header Controls */}
               {modbusProtocol === 'tcp' && (
                 <div className={`p-3 rounded-lg border ${
@@ -750,11 +864,11 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                           <label className="flex items-center gap-1 cursor-pointer text-zinc-400 hover:text-zinc-200">
                             <input
                               type="checkbox"
-                              checked={autoMapRxTid}
-                              onChange={(e) => setAutoMapRxTid(e.target.checked)}
+                              checked={autoMapRxParams}
+                              onChange={(e) => setAutoMapRxParams(e.target.checked)}
                               className="rounded"
                             />
-                            <span>요청 TID 자동 매핑</span>
+                            <span>요청 TID/FC 자동 매핑</span>
                           </label>
                           {parsedRxModbusTcp && tcpTransactionId === parsedRxModbusTcp.tid && (
                             <span className="text-emerald-400 font-semibold flex items-center gap-0.5">
@@ -875,9 +989,17 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
 
                 {/* Function Code */}
                 <div className={`p-3 rounded-lg border ${modbusProtocol === 'rtu' ? 'md:col-span-3' : 'md:col-span-4'} ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
-                  <label className="block font-semibold mb-1">
-                    {modbusMsgType === 'exception' ? '요청받은 원래 기능 코드 (Function Code)' : '기능 코드 (Function Code)'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-semibold">
+                      {modbusMsgType === 'exception' ? '요청받은 원래 기능 코드 (Function Code)' : '기능 코드 (Function Code)'}
+                    </label>
+                    {((modbusProtocol === 'tcp' && parsedRxModbusTcp && functionCode === parsedRxModbusTcp.fc) ||
+                      (modbusProtocol === 'rtu' && parsedRxModbusRtu && functionCode === parsedRxModbusRtu.fc)) && (
+                      <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-0.5">
+                        ✓ 요청 FC(0{functionCode}) 자동 일치됨
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={functionCode}
                     onChange={(e) => setFunctionCode(parseInt(e.target.value))}

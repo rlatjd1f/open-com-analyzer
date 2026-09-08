@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { AppTheme, Packet } from '../types';
 import { Send, Play, Square, Zap, Star, Clock, Trash2, Plus, ChevronDown, Edit3, Wrench } from 'lucide-react';
 import { PacketBuilderModal } from './PacketBuilderModal';
-import { hexStringToBytes, bytesToHexString } from '../utils/crc';
+import { hexStringToBytes, bytesToHexString, calculateCrc16Modbus } from '../utils/crc';
 
 interface FavoritePacket {
   id: string;
@@ -296,18 +296,57 @@ export const SendPanel: React.FC<SendPanelProps> = ({
     const fmt = formatRef.current;
     const delay = rxTriggerDelayRef.current;
 
-    // Modbus TCP Transaction ID dynamic mapping:
-    // If we are sending in HEX format and the received RX is a Modbus TCP frame (length >= 7, protoId === 0),
-    // and the outgoing data in the input box is also a Modbus TCP frame (length >= 7, protoId === 0),
-    // dynamically copy the incoming TID (bytes 0, 1) into the outgoing packet and update the input state.
-    if (fmt === 'hex' && lastRxPacket.bytes && lastRxPacket.bytes.length >= 7) {
+    // Modbus Parameter & Function Code dynamic mapping (TCP & RTU):
+    if (fmt === 'hex' && lastRxPacket.bytes && lastRxPacket.bytes.length >= 4) {
       const rxBytes = lastRxPacket.bytes;
-      const rxProtoId = (rxBytes[2] << 8) | rxBytes[3];
-      if (rxProtoId === 0) {
-        const txBytes = Array.from(hexStringToBytes(toSend));
-        if (txBytes.length >= 7 && txBytes[2] === 0 && txBytes[3] === 0) {
-          txBytes[0] = rxBytes[0];
-          txBytes[1] = rxBytes[1];
+      const isRxTcp = rxBytes.length >= 7 && rxBytes[2] === 0 && rxBytes[3] === 0;
+      const txBytes = Array.from(hexStringToBytes(toSend));
+      const isTxTcp = txBytes.length >= 7 && txBytes[2] === 0 && txBytes[3] === 0;
+
+      // 1. Modbus TCP: Both RX and TX are Modbus TCP
+      if (isRxTcp && isTxTcp) {
+        // Map TID (Bytes 0, 1)
+        txBytes[0] = rxBytes[0];
+        txBytes[1] = rxBytes[1];
+
+        // Map Unit ID (Byte 6)
+        txBytes[6] = rxBytes[6];
+
+        // Map Function Code (Byte 7)
+        const rxFc = rxBytes.length > 7 ? rxBytes[7] : undefined;
+        if (rxFc !== undefined && [1, 2, 3, 4, 5, 6, 15, 16].includes(rxFc)) {
+          if ((rxFc === 5 || rxFc === 6 || rxFc === 15 || rxFc === 16) && rxBytes.length >= 12) {
+            // Write Single/Multiple Echo Response: MBAP(7B) + FC(1B) + Address(2B) + Value/Quantity(2B)
+            const echoPdu = rxBytes.slice(7, 12);
+            const mbap = [rxBytes[0], rxBytes[1], 0x00, 0x00, 0x00, 1 + echoPdu.length, rxBytes[6]];
+            txBytes.splice(0, txBytes.length, ...mbap, ...echoPdu);
+          } else {
+            // Read Responses (FC 01, 02, 03, 04): ensure Function Code matches rxFc
+            txBytes[7] = rxFc;
+          }
+        }
+        toSend = bytesToHexString(txBytes);
+        setData(toSend);
+      }
+      // 2. Modbus RTU: Both RX and TX are Modbus RTU
+      else if (!isRxTcp && !isTxTcp && rxBytes.length >= 4 && txBytes.length >= 4) {
+        const rxSlaveId = rxBytes[0];
+        const rxFc = rxBytes[1];
+        if ([1, 2, 3, 4, 5, 6, 15, 16].includes(rxFc)) {
+          if ((rxFc === 5 || rxFc === 6 || rxFc === 15 || rxFc === 16) && rxBytes.length >= 8) {
+            // Write Single/Multiple Echo Response: SlaveId(1B) + FC(1B) + Address(2B) + Value/Quantity(2B) + CRC(2B)
+            const echoBytes = [rxSlaveId, rxFc, rxBytes[2], rxBytes[3], rxBytes[4], rxBytes[5]];
+            const crc = calculateCrc16Modbus(new Uint8Array(echoBytes));
+            echoBytes.push(crc & 0xFF, (crc >> 8) & 0xFF);
+            txBytes.splice(0, txBytes.length, ...echoBytes);
+          } else {
+            // Read Responses (FC 01, 02, 03, 04): sync Slave ID and FC, then recalculate CRC
+            const payload = txBytes.slice(0, Math.max(0, txBytes.length - 2));
+            payload[0] = rxSlaveId;
+            payload[1] = rxFc;
+            const crc = calculateCrc16Modbus(new Uint8Array(payload));
+            txBytes.splice(0, txBytes.length, ...payload, crc & 0xFF, (crc >> 8) & 0xFF);
+          }
           toSend = bytesToHexString(txBytes);
           setData(toSend);
         }
