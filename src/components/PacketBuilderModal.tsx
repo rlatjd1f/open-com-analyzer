@@ -206,8 +206,10 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [respDataHex, setRespDataHex] = useState<string>('00 F0 01 F4 00 0A 00 3C 00 1E 00 B4 00 1E 00 0A 00 32 00 96');
   const [autoByteCount, setAutoByteCount] = useState<boolean>(true);
   const [manualByteCount, setManualByteCount] = useState<number>(20);
+  const [registerSize, setRegisterSize] = useState<2 | 4>(2); // 2 bytes (16-bit) or 4 bytes (32-bit)
+  const [fourByteEndian, setFourByteEndian] = useState<'ABCD' | 'CDAB' | 'DCBA' | 'BADC'>('ABCD');
   const [sampleRegisterCount, setSampleRegisterCount] = useState<number>(10);
-  const [samplePattern, setSamplePattern] = useState<'incremental' | 'zeros' | 'random' | 'fixed'>('incremental');
+  const [samplePattern, setSamplePattern] = useState<'incremental' | 'zeros' | 'random' | 'fixed' | 'float'>('incremental');
   const [sampleFixedValue, setSampleFixedValue] = useState<string>('0001');
 
   // Modbus Exception specific state
@@ -533,8 +535,9 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   };
 
   // Generate Sample Registers / Bits for Modbus Response
-  const handleGenerateSampleData = (customCount?: number) => {
+  const handleGenerateSampleData = (customCount?: number, overrideSize?: 2 | 4) => {
     const qty = customCount !== undefined ? customCount : sampleRegisterCount;
+    const size = overrideSize !== undefined ? overrideSize : registerSize;
     const isBitMode = functionCode === 1 || functionCode === 2;
 
     if (isBitMode) {
@@ -547,7 +550,55 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
         else bytes.push(((i + 1) % 256).toString(16).padStart(2, '0'));
       }
       setRespDataHex(bytes.join(' ').toUpperCase());
+    } else if (size === 4) {
+      // 4-byte Mode (32-bit DINT / DWORD / FLOAT)
+      const chunks: string[] = [];
+      const cleanFixed = sampleFixedValue.replace(/[^0-9a-fA-F]/g, '').padStart(8, '0').slice(-8);
+
+      for (let i = 1; i <= Math.max(1, qty); i++) {
+        let rawBytes: [number, number, number, number];
+
+        if (samplePattern === 'zeros') {
+          rawBytes = [0, 0, 0, 0];
+        } else if (samplePattern === 'random') {
+          const r = Math.floor(Math.random() * 4294967296);
+          rawBytes = [(r >>> 24) & 0xFF, (r >>> 16) & 0xFF, (r >>> 8) & 0xFF, r & 0xFF];
+        } else if (samplePattern === 'fixed') {
+          const b0 = parseInt(cleanFixed.slice(0, 2), 16) || 0;
+          const b1 = parseInt(cleanFixed.slice(2, 4), 16) || 0;
+          const b2 = parseInt(cleanFixed.slice(4, 6), 16) || 0;
+          const b3 = parseInt(cleanFixed.slice(6, 8), 16) || 0;
+          rawBytes = [b0, b1, b2, b3];
+        } else if (samplePattern === 'float') {
+          // IEEE-754 Single Precision Float (e.g. 1.5, 3.0, 4.5, ...)
+          const floatVal = i * 1.5;
+          const buf = new ArrayBuffer(4);
+          const view = new DataView(buf);
+          view.setFloat32(0, floatVal, false);
+          rawBytes = [view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)];
+        } else {
+          // incremental (00000001, 00000002, ...)
+          const val = i >>> 0;
+          rawBytes = [(val >>> 24) & 0xFF, (val >>> 16) & 0xFF, (val >>> 8) & 0xFF, val & 0xFF];
+        }
+
+        // Apply Byte Order
+        let ordered: [number, number, number, number];
+        const [a, b, c, d] = rawBytes;
+        switch (fourByteEndian) {
+          case 'CDAB': ordered = [c, d, a, b]; break; // Word-Swap (Low-Word High-Byte)
+          case 'DCBA': ordered = [d, c, b, a]; break; // Little-Endian
+          case 'BADC': ordered = [b, a, d, c]; break; // Byte-Swap
+          case 'ABCD':
+          default:     ordered = [a, b, c, d]; break; // Big-Endian
+        }
+
+        const hexParts = ordered.map(b => b.toString(16).toUpperCase().padStart(2, '0'));
+        chunks.push(`${hexParts[0]} ${hexParts[1]} ${hexParts[2]} ${hexParts[3]}`);
+      }
+      setRespDataHex(chunks.join(' ').toUpperCase());
     } else {
+      // 2-byte Mode (16-bit INT / UINT)
       const chunks: string[] = [];
       const cleanFixed = sampleFixedValue.replace(/[^0-9a-fA-F]/g, '').padStart(4, '0').slice(-4);
       for (let i = 1; i <= Math.max(1, qty); i++) {
@@ -1104,13 +1155,17 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                   {(functionCode === 1 || functionCode === 2 || functionCode === 3 || functionCode === 4) ? (
                     <div className={`p-3 rounded-lg border ${isRetro ? 'bg-white border-[#808080]' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-zinc-50 border-zinc-200'}`}>
                       <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-bold text-emerald-400">응답 데이터 본문 (HEX Bytes)</span>
                           <span className="text-[10px] opacity-70">
                             바이트 수: {autoByteCount ? hexStringToBytes(respDataHex).length : manualByteCount}B (0x{(autoByteCount ? hexStringToBytes(respDataHex).length : manualByteCount).toString(16).toUpperCase().padStart(2, '0')})
-                            {functionCode === 3 || functionCode === 4 ? ` = ${Math.floor(hexStringToBytes(respDataHex).length / 2)}개 레지스터` : ''}
+                            {functionCode === 3 || functionCode === 4 ? (
+                              registerSize === 4
+                                ? ` = ${Math.floor(hexStringToBytes(respDataHex).length / 4)}개 값 (32-bit / ${Math.floor(hexStringToBytes(respDataHex).length / 2)}개 레지스터)`
+                                : ` = ${Math.floor(hexStringToBytes(respDataHex).length / 2)}개 레지스터 (16-bit)`
+                            ) : ''}
                           </span>
-                          <label className="flex items-center gap-1 cursor-pointer text-[11px] opacity-90">
+                          <label className="flex items-center gap-1 cursor-pointer text-[11px] opacity-90 pl-1 border-l border-zinc-700/40">
                             <input
                               type="checkbox"
                               checked={autoByteCount}
@@ -1132,6 +1187,39 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                             </div>
                           )}
                         </div>
+
+                        {/* Register Data Unit Size Switcher: 2 Bytes vs 4 Bytes */}
+                        {(functionCode === 3 || functionCode === 4) && (
+                          <div className="flex items-center gap-1 p-0.5 rounded bg-black/20 dark:bg-zinc-800">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRegisterSize(2);
+                                if (samplePattern === 'float') setSamplePattern('incremental');
+                              }}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                registerSize === 2
+                                  ? 'bg-emerald-600 text-white shadow-xs'
+                                  : 'text-zinc-400 hover:text-zinc-200'
+                              }`}
+                              title="16-bit 정수/워드 단위 (1 레지스터당 2바이트)"
+                            >
+                              2 Bytes (16-bit)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRegisterSize(4)}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                                registerSize === 4
+                                  ? 'bg-blue-600 text-white shadow-xs'
+                                  : 'text-zinc-400 hover:text-zinc-200'
+                              }`}
+                              title="32-bit DINT / Float 단위 (1 데이터당 4바이트 / 2 레지스터)"
+                            >
+                              4 Bytes (32-bit / Float)
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <textarea
@@ -1154,15 +1242,15 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                           
                           <div className="flex items-center gap-1">
                             <span className="opacity-70 text-[11px]">
-                              {functionCode === 1 || functionCode === 2 ? '코일 수:' : '레지스터 수:'}
+                              {functionCode === 1 || functionCode === 2 ? '코일 수:' : registerSize === 4 ? '32-bit 값 개수:' : '레지스터 수:'}
                             </span>
                             <input
                               type="number"
                               min={1}
-                              max={functionCode === 1 || functionCode === 2 ? 2000 : 125}
+                              max={functionCode === 1 || functionCode === 2 ? 2000 : registerSize === 4 ? 62 : 125}
                               value={sampleRegisterCount}
                               onChange={(e) => {
-                                const maxLimit = functionCode === 1 || functionCode === 2 ? 2000 : 125;
+                                const maxLimit = functionCode === 1 || functionCode === 2 ? 2000 : registerSize === 4 ? 62 : 125;
                                 setSampleRegisterCount(Math.max(1, Math.min(maxLimit, parseInt(e.target.value) || 1)));
                               }}
                               className="w-14 p-1 border rounded font-mono text-xs text-center bg-transparent font-bold"
@@ -1171,7 +1259,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                           </div>
 
                           <div className="flex items-center gap-1">
-                            {[10, 20, 50, 125].map((cnt) => (
+                            {(registerSize === 4 ? [5, 10, 25, 60] : [10, 20, 50, 125]).map((cnt) => (
                               <button
                                 key={cnt}
                                 type="button"
@@ -1186,6 +1274,24 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                             ))}
                           </div>
 
+                          {/* 4-Byte Mode Endianness Selector */}
+                          {registerSize === 4 && (functionCode === 3 || functionCode === 4) && (
+                            <div className="flex items-center gap-1 pl-2 border-l border-zinc-700/40">
+                              <span className="opacity-70 text-[11px]">순서:</span>
+                              <select
+                                value={fourByteEndian}
+                                onChange={(e: any) => setFourByteEndian(e.target.value)}
+                                className="px-1.5 py-1 border rounded text-[11px] font-mono bg-transparent font-semibold text-blue-400"
+                                title="32-bit 바이트/워드 순서 (Endianness)"
+                              >
+                                <option value="ABCD">ABCD (Big-Endian 표준)</option>
+                                <option value="CDAB">CDAB (Word-Swap 워드스왑)</option>
+                                <option value="DCBA">DCBA (Little-Endian 리틀엔디안)</option>
+                                <option value="BADC">BADC (Byte-Swap 바이트스왑)</option>
+                              </select>
+                            </div>
+                          )}
+
                           <div className="flex items-center gap-1.5 pl-2 border-l border-zinc-700/40">
                             <span className="opacity-70 text-[11px]">패턴:</span>
                             <select
@@ -1193,19 +1299,22 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                               onChange={(e: any) => setSamplePattern(e.target.value)}
                               className="px-1.5 py-1 border rounded text-[11px] font-mono bg-transparent"
                             >
-                              <option value="incremental">순차 증가 (0001, 0002...)</option>
-                              <option value="zeros">모두 0 (0000 0000...)</option>
+                              <option value="incremental">순차 증가 ({registerSize === 4 ? '00000001, 00000002...' : '0001, 0002...'})</option>
+                              <option value="zeros">모두 0 ({registerSize === 4 ? '00000000...' : '0000 0000...'})</option>
                               <option value="random">랜덤 바이트열</option>
                               <option value="fixed">고정 값 반복</option>
+                              {registerSize === 4 && (
+                                <option value="float">32-bit Float 실수 (1.5, 3.0, 4.5...)</option>
+                              )}
                             </select>
                             {samplePattern === 'fixed' && (
                               <input
                                 type="text"
-                                maxLength={4}
+                                maxLength={registerSize === 4 ? 8 : 4}
                                 value={sampleFixedValue}
                                 onChange={(e) => setSampleFixedValue(e.target.value)}
-                                placeholder="0001"
-                                className="w-14 p-1 border rounded font-mono text-xs uppercase text-center bg-transparent"
+                                placeholder={registerSize === 4 ? '00000001' : '0001'}
+                                className="w-20 p-1 border rounded font-mono text-xs uppercase text-center bg-transparent"
                               />
                             )}
                           </div>
@@ -1218,11 +1327,12 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                             className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition-all"
                           >
                             <Sparkles size={11} />
-                            <span>{sampleRegisterCount}개 생성 적용</span>
+                            <span>{sampleRegisterCount}개 ({sampleRegisterCount * registerSize}B) 생성 적용</span>
                           </button>
                           <button
                             type="button"
                             onClick={() => {
+                              setRegisterSize(2);
                               setSampleRegisterCount(80);
                               setRespDataHex('00F001F4000A003C001E00B4001E000A00320096009600050005000500FA00FA00140014000500050005000A00020003000300010001000200020002000100020001000F000F00320032015E000100070100000105F0030C026C00960082006E00500032010400D2000A001E002D00030009001A000500200000000100EB020800260073006C002B002900BA00B6000100DC001400DC0014000F0001000500F8');
                             }}
