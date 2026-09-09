@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Packet, AppTheme } from '../types';
 import {
   analyzePacket,
@@ -847,13 +847,19 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
 
   // 2. View mode state: 'dual' | 'left' | 'right'
   const [viewMode, setViewMode] = useState<'dual' | 'left' | 'right'>('dual');
+  const prevPacketIdRef = useRef<string | null>(null);
 
-  // Reset viewMode to 'dual' whenever a new paired packet is opened
+  // Reset viewMode to 'dual' only when opening the modal or selecting a completely different packet to inspect
   useEffect(() => {
-    if (pairInfo) {
+    if (!isOpen) {
+      prevPacketIdRef.current = null;
+      return;
+    }
+    if (packet && packet.id !== prevPacketIdRef.current) {
+      prevPacketIdRef.current = packet.id;
       setViewMode('dual');
     }
-  }, [packet?.id, pairInfo]);
+  }, [isOpen, packet?.id]);
 
   // Close modal on ESC key press
   useEffect(() => {
