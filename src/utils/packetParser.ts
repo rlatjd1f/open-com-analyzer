@@ -755,16 +755,14 @@ export function decodeRegisterPayload(
 
   const rows: DecodedRegisterRow[] = [];
   const chunkSize = unitSize;
-  const wordCount = unitSize / 2;
 
   for (let offset = 0; offset + chunkSize <= bytes.length; offset += chunkSize) {
     const rawChunk = bytes.slice(offset, offset + chunkSize);
     const itemIndex = Math.floor(offset / chunkSize);
-    const regStart = startRegisterOffset + itemIndex * wordCount;
-    const regEnd = regStart + wordCount - 1;
+    const regNum = startRegisterOffset + itemIndex;
 
-    const regLabel = wordCount === 1 ? `Reg #${regStart}` : `Reg #${regStart}..#${regEnd} (${wordCount}W)`;
-    const byteOffsetLabel = `+${offset}B..+${offset + chunkSize - 1}B`;
+    const regLabel = `Reg #${regNum}`;
+    const byteOffsetLabel = `+${offset}..+${offset + chunkSize - 1}`;
     const hexStr = rawChunk.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 
     // Reorder bytes according to byteOrder
