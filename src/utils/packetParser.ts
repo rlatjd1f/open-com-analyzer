@@ -71,7 +71,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
 
   const fields: PacketField[] = [
     {
-      name: '트랜잭션 ID (Transaction ID)',
+      name: '트랜잭션 ID (TID)',
       bytes: [bytes[0], bytes[1]],
       byteRange: [0, 1],
       hex: bytesToHex([bytes[0], bytes[1]]),
@@ -80,7 +80,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       tagColor: 'blue'
     },
     {
-      name: '프로토콜 ID (Protocol ID)',
+      name: '프로토콜 ID (PID)',
       bytes: [bytes[2], bytes[3]],
       byteRange: [2, 3],
       hex: bytesToHex([bytes[2], bytes[3]]),

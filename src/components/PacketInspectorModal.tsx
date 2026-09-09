@@ -437,7 +437,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
               >
                 <th className="py-2 px-2.5 w-10 text-center">No</th>
                 <th className="py-2 px-2.5 w-20 text-center">오프셋</th>
-                <th className="py-2 px-3">필드명</th>
+                <th className="py-2 px-3 whitespace-nowrap">필드명</th>
                 <th className="py-2 px-3 min-w-[210px]">HEX</th>
                 <th className="py-2 px-3 w-32">파싱 값</th>
               </tr>
@@ -470,8 +470,8 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                     <td className="py-2 px-2.5 text-center font-bold text-amber-500 dark:text-amber-400 align-top whitespace-nowrap">
                       {rangeStr}
                     </td>
-                    <td className="py-2 px-3 font-semibold font-sans align-top">
-                      <div className="flex items-center gap-1.5 mt-0.5">
+                    <td className="py-2 px-3 font-semibold font-sans align-top whitespace-nowrap">
+                      <div className="flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
                         <span
                           className={`w-2 h-2 rounded-full shrink-0 ${
                             field.tagColor === 'rose'
@@ -485,7 +485,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                               : 'bg-zinc-500'
                           }`}
                         />
-                        <span className="break-normal">{field.name}</span>
+                        <span className="whitespace-nowrap">{field.name}</span>
                       </div>
                     </td>
                     <td className="py-2 px-3 font-bold text-indigo-600 dark:text-indigo-400 align-top font-mono whitespace-nowrap leading-relaxed">
