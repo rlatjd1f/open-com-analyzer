@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { AppTheme, Packet } from '../types';
 import {
   X,
@@ -37,6 +37,18 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
   const [copiedHex, setCopiedHex] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
   const [selectedField, setSelectedField] = useState<PacketField | null>(null);
+
+  // Close modal on ESC key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   // Normalize packet bytes
   const packetBytes = useMemo<number[]>(() => {

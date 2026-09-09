@@ -109,10 +109,10 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
       }`}
     >
       {/* 1. Left Fixed-Width Column: Timestamp [HH:mm:ss.SSS] + RX/TX + Length + Action Badges */}
-      <div className="w-[285px] min-w-[285px] max-w-[285px] shrink-0 flex items-center justify-between pt-0.5 select-none pr-2 border-r border-white/20 dark:border-zinc-700/60 gap-1.5">
+      <div className="w-[315px] min-w-[315px] max-w-[315px] shrink-0 flex items-center justify-between pt-0.5 select-none pr-2 border-r border-white/20 dark:border-zinc-700/60 gap-1.5">
         {/* Timestamp HH:mm:ss.SSS */}
         <span
-          className={`font-mono text-[12px] font-bold px-1.5 py-0.5 rounded text-center tracking-tight ${
+          className={`font-mono text-[12px] font-bold px-1.5 py-0.5 rounded text-center tracking-tight shrink-0 ${
             isRetro
               ? 'bg-black/40 text-white border border-white/20'
               : isDark
@@ -129,14 +129,14 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
             backgroundColor: isRx ? 'var(--rx-color, #FF9900)' : 'var(--tx-color, #008080)',
             color: 'var(--text-color, #000000)'
           }}
-          className="w-7 text-center font-extrabold text-[11px] py-0.5 rounded uppercase shadow-sm"
+          className="w-7 text-center font-extrabold text-[11px] py-0.5 rounded uppercase shadow-sm shrink-0"
         >
           {isRx ? 'RX' : 'TX'}
         </span>
 
         {/* High-Contrast Byte Count Badge */}
         <span
-          className={`min-w-[42px] px-1 py-0.5 rounded font-mono text-[11px] font-bold text-center tracking-tight shadow-sm ${
+          className={`min-w-[42px] px-1 py-0.5 rounded font-mono text-[11px] font-bold text-center tracking-tight shadow-sm shrink-0 ${
             isRetro
               ? 'bg-[#15213b] text-[#55f2ff] border border-[#6d8bc9]'
               : isDark
@@ -148,22 +148,22 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
         </span>
 
         {/* Action Badges Group (Inspect + Copy) */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           {/* Inspect Button */}
           {onInspectPacket && (
             <button
               onClick={handleInspectClick}
-              className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-600/90 text-white hover:bg-indigo-500 shadow-xs border border-indigo-400/50 transition-all"
+              className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded bg-indigo-600/90 text-white hover:bg-indigo-500 shadow-xs border border-indigo-400/50 transition-all whitespace-nowrap shrink-0 cursor-pointer"
               title="패킷 프로토콜 상세 분석 팝업 (더블 클릭 가능)"
             >
-              <Search size={10} className="shrink-0" />
-              <span className="font-sans">분석</span>
+              <Search size={11} className="shrink-0" />
+              <span className="font-sans whitespace-nowrap leading-none">분석</span>
             </button>
           )}
 
           {/* Copy Indicator Badge */}
           <div
-            className={`flex items-center gap-1 text-[11px] font-bold px-1.5 py-0.5 rounded transition-all shadow-xs ${
+            className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded transition-all shadow-xs whitespace-nowrap shrink-0 cursor-pointer ${
               copied
                 ? 'bg-emerald-600 text-white scale-105'
                 : 'opacity-0 group-hover:opacity-100 bg-black/30 dark:bg-zinc-800/90 text-zinc-300 hover:text-white border border-white/20 dark:border-zinc-600'
@@ -173,12 +173,12 @@ const PacketRow: React.FC<PacketRowProps> = memo(({
             {copied ? (
               <>
                 <Check size={11} className="text-white shrink-0" />
-                <span className="text-[10px] font-sans">복사됨!</span>
+                <span className="text-[10px] font-sans whitespace-nowrap leading-none">복사됨!</span>
               </>
             ) : (
               <>
                 <Copy size={11} className="shrink-0" />
-                <span className="text-[10px] font-sans">복사</span>
+                <span className="text-[10px] font-sans whitespace-nowrap leading-none">복사</span>
               </>
             )}
           </div>
