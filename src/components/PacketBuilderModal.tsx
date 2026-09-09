@@ -235,13 +235,13 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [tailHex, setTailHex] = useState<string>('03'); // ETX
 
   // --- 3. Radix Calculator State ---
-  const [activeRadix, setActiveRadix] = useState<'hex' | 'dec' | 'oct' | 'bin' | 'float32'>('float32');
+  const [activeRadix, setActiveRadix] = useState<'hex' | 'dec' | 'oct' | 'bin' | 'float32'>('dec');
   const [radixInputs, setRadixInputs] = useState<RadixValues>({
-    hex: '3F C0 00 00',
-    dec: '1069547520',
-    float32: '1.5',
-    oct: '7760000000',
-    bin: '0011 1111 1100 0000 0000 0000 0000 0000'
+    hex: '',
+    dec: '',
+    float32: '',
+    oct: '',
+    bin: ''
   });
 
   const [copied, setCopied] = useState(false);
