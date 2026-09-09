@@ -368,6 +368,15 @@ export const SendPanel: React.FC<SendPanelProps> = ({
   const isRetro = theme.name === 'classic-retro';
   const isDark = theme.name === 'modern-dark';
 
+  const formatTime = (ts?: number) => {
+    if (!ts || ts < 10000) return '--:--:--';
+    const d = new Date(ts);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const ss = String(d.getSeconds()).padStart(2, '0');
+    return `${hh}:${mm}:${ss}`;
+  };
+
   const favoritePackets = useMemo(() => packetList.filter(p => p.isFavorite), [packetList]);
   const recentPackets = useMemo(() => packetList.filter(p => !p.isFavorite), [packetList]);
 
@@ -413,7 +422,7 @@ export const SendPanel: React.FC<SendPanelProps> = ({
           title="자주 사용하는 패킷 프리셋 및 최근 전송 기록"
         >
           <Star size={13} className={isFavoritesOpen ? 'fill-current' : 'text-amber-500 fill-amber-500'} />
-          <span>자주 쓰는 데이터</span>
+          <span>자주 쓰는 패킷</span>
           <ChevronDown size={12} className={`transition-transform duration-200 ${isFavoritesOpen ? 'rotate-180' : ''}`} />
         </button>
 
@@ -649,18 +658,32 @@ export const SendPanel: React.FC<SendPanelProps> = ({
                               </button>
                             </div>
                           ) : (
-                            <>
-                              {pkt.label ? (
-                                <div className="flex items-center gap-1 mb-0.5">
-                                  <span className="font-semibold text-xs text-indigo-400 truncate">
-                                    {pkt.label}
-                                  </span>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`font-mono text-[11px] px-1.5 py-0.5 rounded shrink-0 font-medium ${
+                                  isRetro
+                                    ? 'bg-zinc-200 text-black border border-zinc-400'
+                                    : isDark
+                                    ? 'bg-zinc-800 text-zinc-400 border border-zinc-700/60'
+                                    : 'bg-zinc-100 text-zinc-600 border border-zinc-200'
+                                }`}
+                                title={`전송 시각: ${formatTime(pkt.timestamp)}`}
+                              >
+                                {formatTime(pkt.timestamp)}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                {pkt.label ? (
+                                  <div className="flex items-center gap-1 mb-0.5">
+                                    <span className="font-semibold text-xs text-indigo-400 truncate">
+                                      {pkt.label}
+                                    </span>
+                                  </div>
+                                ) : null}
+                                <div className="font-mono text-xs truncate opacity-90">
+                                  {pkt.data}
                                 </div>
-                              ) : null}
-                              <div className="font-mono text-xs truncate opacity-90">
-                                {pkt.data}
                               </div>
-                            </>
+                            </div>
                           )}
                         </div>
 
