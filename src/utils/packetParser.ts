@@ -762,7 +762,7 @@ export function decodeRegisterPayload(
     const regNum = startRegisterOffset + itemIndex;
 
     const regLabel = `Reg #${regNum}`;
-    const byteOffsetLabel = `+${offset}..+${offset + chunkSize - 1}`;
+    const byteOffsetLabel = `[${offset}~${offset + chunkSize - 1}]`;
     const hexStr = rawChunk.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 
     // Reorder bytes according to byteOrder
