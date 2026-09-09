@@ -488,6 +488,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                 <th className="py-2 px-2.5 w-10 text-center">No</th>
                 <th className="py-2 px-2.5 w-20 text-center">오프셋</th>
                 <th className="py-2 px-3 whitespace-nowrap min-w-[170px]">필드명</th>
+                <th className="py-2 px-2.5 w-16 text-center whitespace-nowrap">길이</th>
                 <th className="py-2 px-3 min-w-[210px]">HEX</th>
                 <th className="py-2 px-3 min-w-[150px]">파싱 값</th>
               </tr>
@@ -499,6 +500,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                   field.byteRange[0] === field.byteRange[1]
                     ? `[${field.byteRange[0]}]`
                     : `[${field.byteRange[0]}..${field.byteRange[1]}]`;
+                const byteLen = field.bytes ? field.bytes.length : field.byteRange[1] - field.byteRange[0] + 1;
                 const hexLines = splitHexInto8ByteLines(field.hex);
 
                 const fieldColor = getFieldColor(field.tagColor, idx);
@@ -530,6 +532,9 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                         <span className="whitespace-nowrap">{field.name}</span>
                       </div>
                     </td>
+                    <td className="py-2 px-2.5 text-center font-mono font-bold text-cyan-600 dark:text-cyan-400 align-top whitespace-nowrap">
+                      {byteLen}B
+                    </td>
                     <td className="py-2 px-3 font-bold text-indigo-600 dark:text-indigo-400 align-top font-mono whitespace-nowrap leading-relaxed">
                       {hexLines.map((line, lineIdx) => (
                         <div key={lineIdx} className="tracking-wide">
@@ -538,7 +543,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                       ))}
                     </td>
                     <td className="py-2 px-3 text-emerald-600 dark:text-emerald-400 font-semibold align-top whitespace-nowrap min-w-[150px]">
-                      {field.dec !== undefined ? String(field.dec) : '-'}
+                      {field.dec !== undefined && field.dec !== '' ? String(field.dec) : ''}
                     </td>
                   </tr>
                 );

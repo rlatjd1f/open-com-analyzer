@@ -237,7 +237,6 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
         bytes: dataBytes,
         byteRange: [9, bytes.length - 1],
         hex: bytesToHex(dataBytes),
-        dec: `${dataBytes.length} Bytes`,
         description: `슬레이브 장치에서 읽어온 데이터 페이로드 (${Math.floor(dataBytes.length / 2)}개 레지스터)`,
         tagColor: 'emerald'
       });
@@ -448,7 +447,6 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
           bytes: dataBytes,
           byteRange: [3, bytes.length - 3],
           hex: bytesToHex(dataBytes),
-          dec: `${dataBytes.length} Bytes`,
           description: `슬레이브에서 읽어온 데이터 페이로드 (${Math.floor(dataBytes.length / 2)}개 레지스터)`,
           tagColor: 'emerald'
         });
