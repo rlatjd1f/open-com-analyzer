@@ -51,6 +51,23 @@ interface PacketInspectPaneProps {
   onApplyToSend?: (data: string, format: 'hex' | 'ascii') => void;
 }
 
+/**
+ * Splits a hex string into chunks of 8 bytes per line to prevent mid-byte breaks
+ * and provide clean, fixed 8-byte rows (e.g. for Register Data).
+ */
+const splitHexInto8ByteLines = (hexStr: string): string[] => {
+  if (!hexStr) return [];
+  const tokens = hexStr.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length <= 8) {
+    return [tokens.join(' ')];
+  }
+  const lines: string[] = [];
+  for (let i = 0; i < tokens.length; i += 8) {
+    lines.push(tokens.slice(i, i + 8).join(' '));
+  }
+  return lines;
+};
+
 const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   packet,
   theme,
@@ -395,7 +412,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
             <Layers size={13} className="text-indigo-400" />
             프레임 필드 구조 분석 (Field Breakdown)
           </span>
-          <span className="text-[10px] opacity-60">총 {analysis?.fields.length || 0}개 필드</span>
+          <span className="text-xs opacity-70">총 {analysis?.fields.length || 0}개 필드</span>
         </div>
 
         <div
@@ -407,10 +424,10 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
               : 'bg-white border-zinc-200 shadow-2xs'
           }`}
         >
-          <table className="w-full text-left text-[11px] border-collapse font-mono">
+          <table className="w-full text-left text-xs sm:text-[13px] border-collapse font-mono">
             <thead>
               <tr
-                className={`border-b select-none text-[10px] font-bold ${
+                className={`border-b select-none text-[11px] sm:text-xs font-bold ${
                   isRetro
                     ? 'bg-[#ece9d8] text-black border-[#808080]'
                     : isDark
@@ -418,11 +435,11 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                     : 'bg-zinc-100 text-zinc-600 border-zinc-200'
                 }`}
               >
-                <th className="py-1 px-2 w-8 text-center">No</th>
-                <th className="py-1 px-2 w-16 text-center">오프셋</th>
-                <th className="py-1 px-2">필드명</th>
-                <th className="py-1 px-2 w-36">HEX</th>
-                <th className="py-1 px-2 w-28">파싱 값</th>
+                <th className="py-2 px-2.5 w-10 text-center">No</th>
+                <th className="py-2 px-2.5 w-20 text-center">오프셋</th>
+                <th className="py-2 px-3">필드명</th>
+                <th className="py-2 px-3 min-w-[210px]">HEX</th>
+                <th className="py-2 px-3 w-32">파싱 값</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -432,6 +449,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                   field.byteRange[0] === field.byteRange[1]
                     ? `[${field.byteRange[0]}]`
                     : `[${field.byteRange[0]}..${field.byteRange[1]}]`;
+                const hexLines = splitHexInto8ByteLines(field.hex);
 
                 return (
                   <tr
@@ -448,30 +466,36 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                         : 'hover:bg-zinc-50 text-zinc-700'
                     }`}
                   >
-                    <td className="py-1.5 px-2 text-center text-zinc-400">{idx + 1}</td>
-                    <td className="py-1.5 px-2 text-center font-bold text-amber-500 dark:text-amber-400">
+                    <td className="py-2 px-2.5 text-center text-zinc-400 align-top">{idx + 1}</td>
+                    <td className="py-2 px-2.5 text-center font-bold text-amber-500 dark:text-amber-400 align-top whitespace-nowrap">
                       {rangeStr}
                     </td>
-                    <td className="py-1.5 px-2 font-semibold font-sans flex items-center gap-1">
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          field.tagColor === 'rose'
-                            ? 'bg-rose-500'
-                            : field.tagColor === 'emerald'
-                            ? 'bg-emerald-500'
-                            : field.tagColor === 'amber'
-                            ? 'bg-amber-500'
-                            : field.tagColor === 'blue'
-                            ? 'bg-blue-500'
-                            : 'bg-zinc-500'
-                        }`}
-                      />
-                      <span className="truncate">{field.name}</span>
+                    <td className="py-2 px-3 font-semibold font-sans align-top">
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${
+                            field.tagColor === 'rose'
+                              ? 'bg-rose-500'
+                              : field.tagColor === 'emerald'
+                              ? 'bg-emerald-500'
+                              : field.tagColor === 'amber'
+                              ? 'bg-amber-500'
+                              : field.tagColor === 'blue'
+                              ? 'bg-blue-500'
+                              : 'bg-zinc-500'
+                          }`}
+                        />
+                        <span className="break-normal">{field.name}</span>
+                      </div>
                     </td>
-                    <td className="py-1.5 px-2 font-bold text-indigo-600 dark:text-indigo-400 break-all">
-                      {field.hex}
+                    <td className="py-2 px-3 font-bold text-indigo-600 dark:text-indigo-400 align-top font-mono whitespace-nowrap leading-relaxed">
+                      {hexLines.map((line, lineIdx) => (
+                        <div key={lineIdx} className="tracking-wide">
+                          {line}
+                        </div>
+                      ))}
                     </td>
-                    <td className="py-1.5 px-2 text-emerald-600 dark:text-emerald-400 font-semibold">
+                    <td className="py-2 px-3 text-emerald-600 dark:text-emerald-400 font-semibold align-top whitespace-nowrap">
                       {field.dec !== undefined ? String(field.dec) : '-'}
                     </td>
                   </tr>
