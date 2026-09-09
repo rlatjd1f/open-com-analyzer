@@ -488,7 +488,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                 <th className="py-2 px-2.5 w-10 text-center">No</th>
                 <th className="py-2 px-2.5 w-20 text-center">오프셋</th>
                 <th className="py-2 px-3 whitespace-nowrap min-w-[170px]">필드명</th>
-                <th className="py-2 px-2.5 w-16 text-center whitespace-nowrap">길이</th>
+                <th className="py-2 px-2.5 w-20 text-center whitespace-nowrap">길이</th>
                 <th className="py-2 px-3 min-w-[210px]">HEX</th>
                 <th className="py-2 px-3 min-w-[150px]">파싱 값</th>
               </tr>
@@ -533,7 +533,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                       </div>
                     </td>
                     <td className="py-2 px-2.5 text-center font-mono font-bold text-cyan-600 dark:text-cyan-400 align-top whitespace-nowrap">
-                      {byteLen}B
+                      {byteLen} Byte
                     </td>
                     <td className="py-2 px-3 font-bold text-indigo-600 dark:text-indigo-400 align-top font-mono whitespace-nowrap leading-relaxed">
                       {hexLines.map((line, lineIdx) => (
