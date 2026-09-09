@@ -845,8 +845,8 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div
         className={`relative w-full ${
-          isDualActive ? 'max-w-[96vw] xl:max-w-7xl' : 'max-w-4xl'
-        } max-h-[94vh] flex flex-col rounded-lg shadow-2xl overflow-hidden border transition-all duration-200 ${
+          isDualActive ? 'max-w-[96vw] xl:max-w-7xl h-[92vh]' : 'max-w-4xl max-h-[94vh]'
+        } flex flex-col rounded-lg shadow-2xl overflow-hidden border transition-all duration-200 ${
           isRetro
             ? 'bg-[#d4d0c8] text-black border-[#808080]'
             : isDark
@@ -989,13 +989,13 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
           </div>
         </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+        {/* Modal Body: Left and Right Independent Scroll Areas */}
+        <div className="flex-1 min-h-0 overflow-hidden">
           {pairInfo ? (
             viewMode === 'dual' ? (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 divide-y lg:divide-y-0 lg:divide-x divide-zinc-200 dark:divide-zinc-800">
-                {/* Left: Request (Stimulus) Pane */}
-                <div className="lg:pr-2">
+              <div className="h-full grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-zinc-200 dark:divide-zinc-800">
+                {/* Left: Request (Stimulus) Pane - Independent Scroll Area */}
+                <div className="h-full overflow-y-auto p-3 sm:p-4 lg:pr-3">
                   <PacketInspectPane
                     packet={pairInfo.leftPacket}
                     theme={theme}
@@ -1010,8 +1010,8 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
                   />
                 </div>
 
-                {/* Right: Response Pane */}
-                <div className="lg:pl-4 pt-4 lg:pt-0">
+                {/* Right: Response Pane - Independent Scroll Area */}
+                <div className="h-full overflow-y-auto p-3 sm:p-4 lg:pl-3">
                   <PacketInspectPane
                     packet={pairInfo.rightPacket}
                     theme={theme}
@@ -1027,43 +1027,49 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
                 </div>
               </div>
             ) : viewMode === 'left' ? (
-              <PacketInspectPane
-                packet={pairInfo.leftPacket}
-                theme={theme}
-                isRetro={isRetro}
-                isDark={isDark}
-                isDual={false}
-                role="req"
-                customRoleTitle={
-                  pairInfo.flowOrder === 'rx-first' ? 'RX (수신 요청)' : 'TX (송신 요청)'
-                }
-                onApplyToSend={onApplyToSend}
-              />
+              <div className="h-full overflow-y-auto p-3 sm:p-4">
+                <PacketInspectPane
+                  packet={pairInfo.leftPacket}
+                  theme={theme}
+                  isRetro={isRetro}
+                  isDark={isDark}
+                  isDual={false}
+                  role="req"
+                  customRoleTitle={
+                    pairInfo.flowOrder === 'rx-first' ? 'RX (수신 요청)' : 'TX (송신 요청)'
+                  }
+                  onApplyToSend={onApplyToSend}
+                />
+              </div>
             ) : (
-              <PacketInspectPane
-                packet={pairInfo.rightPacket}
-                theme={theme}
-                isRetro={isRetro}
-                isDark={isDark}
-                isDual={false}
-                role="res"
-                customRoleTitle={
-                  pairInfo.flowOrder === 'rx-first' ? 'TX (송신 응답)' : 'RX (수신 응답)'
-                }
-                onApplyToSend={onApplyToSend}
-              />
+              <div className="h-full overflow-y-auto p-3 sm:p-4">
+                <PacketInspectPane
+                  packet={pairInfo.rightPacket}
+                  theme={theme}
+                  isRetro={isRetro}
+                  isDark={isDark}
+                  isDual={false}
+                  role="res"
+                  customRoleTitle={
+                    pairInfo.flowOrder === 'rx-first' ? 'TX (송신 응답)' : 'RX (수신 응답)'
+                  }
+                  onApplyToSend={onApplyToSend}
+                />
+              </div>
             )
           ) : (
             /* Standalone Single Packet */
-            <PacketInspectPane
-              packet={packet}
-              theme={theme}
-              isRetro={isRetro}
-              isDark={isDark}
-              isDual={false}
-              role="standalone"
-              onApplyToSend={onApplyToSend}
-            />
+            <div className="h-full overflow-y-auto p-3 sm:p-4">
+              <PacketInspectPane
+                packet={packet}
+                theme={theme}
+                isRetro={isRetro}
+                isDark={isDark}
+                isDual={false}
+                role="standalone"
+                onApplyToSend={onApplyToSend}
+              />
+            </div>
           )}
         </div>
 
