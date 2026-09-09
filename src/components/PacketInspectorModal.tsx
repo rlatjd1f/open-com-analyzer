@@ -437,9 +437,9 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
               >
                 <th className="py-2 px-2.5 w-10 text-center">No</th>
                 <th className="py-2 px-2.5 w-20 text-center">오프셋</th>
-                <th className="py-2 px-3 whitespace-nowrap">필드명</th>
+                <th className="py-2 px-3 whitespace-nowrap min-w-[170px]">필드명</th>
                 <th className="py-2 px-3 min-w-[210px]">HEX</th>
-                <th className="py-2 px-3 w-32">파싱 값</th>
+                <th className="py-2 px-3 min-w-[150px]">파싱 값</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -495,7 +495,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                         </div>
                       ))}
                     </td>
-                    <td className="py-2 px-3 text-emerald-600 dark:text-emerald-400 font-semibold align-top whitespace-nowrap">
+                    <td className="py-2 px-3 text-emerald-600 dark:text-emerald-400 font-semibold align-top whitespace-nowrap min-w-[150px]">
                       {field.dec !== undefined ? String(field.dec) : '-'}
                     </td>
                   </tr>
@@ -872,10 +872,10 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
   const isDualActive = !!pairInfo && viewMode === 'dual';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-3 md:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div
         className={`relative w-full ${
-          isDualActive ? 'max-w-[96vw] xl:max-w-7xl h-[92vh]' : 'max-w-4xl max-h-[94vh]'
+          isDualActive ? 'w-[97vw] max-w-[1780px] h-[93vh]' : 'max-w-5xl max-h-[94vh]'
         } flex flex-col rounded-lg shadow-2xl overflow-hidden border transition-all duration-200 ${
           isRetro
             ? 'bg-[#d4d0c8] text-black border-[#808080]'
