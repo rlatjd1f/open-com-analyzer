@@ -201,9 +201,9 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
 
   return (
     <div className={`flex flex-col ${isDual ? 'gap-3' : 'gap-3.5'}`}>
-      {/* Pane Sub-header: Direction & Key Stats */}
+      {/* Pane Sub-header: Direction & Key Stats (Line 1) + Action Buttons (Line 2) */}
       <div
-        className={`flex items-center justify-between p-2 sm:p-2.5 rounded-lg border select-none min-h-[44px] gap-2 ${
+        className={`flex flex-col gap-2 p-2.5 rounded-lg border select-none ${
           isRetro
             ? 'bg-white border-[#808080]'
             : isDark
@@ -215,13 +215,14 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
             : 'bg-indigo-50/70 border-indigo-200'
         }`}
       >
-        <div className="flex items-center gap-1.5 min-w-0 flex-nowrap overflow-x-auto no-scrollbar">
+        {/* Line 1: Direction & Key Stats */}
+        <div className="flex items-center gap-1.5 flex-wrap">
           <span
             style={{
               backgroundColor: isRx ? theme.rxColor : theme.txColor,
               color: theme.textColor || '#000'
             }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-black uppercase shadow-2xs shrink-0 whitespace-nowrap"
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-black uppercase shadow-2xs shrink-0"
           >
             {isRx ? <Download size={12} /> : <Send size={12} />}
             <span>
@@ -240,7 +241,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
           </span>
 
           <span
-            className={`font-mono text-xs px-2 py-0.5 rounded shrink-0 whitespace-nowrap ${
+            className={`font-mono text-xs px-2 py-0.5 rounded shrink-0 ${
               isRetro
                 ? 'bg-black/10 text-black'
                 : isDark
@@ -252,7 +253,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
           </span>
 
           <span
-            className={`font-mono text-xs px-2 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
+            className={`font-mono text-xs px-2 py-0.5 rounded font-bold shrink-0 ${
               isRetro
                 ? 'bg-[#15213b] text-[#55f2ff]'
                 : isDark
@@ -265,7 +266,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
 
           {analysis && (
             <span
-              className={`text-xs px-2 py-0.5 rounded font-bold border shrink-0 whitespace-nowrap ${
+              className={`text-xs px-2 py-0.5 rounded font-bold border shrink-0 ${
                 analysis.protocol === 'modbus-tcp'
                   ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
                   : analysis.protocol === 'modbus-rtu'
@@ -278,11 +279,19 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
           )}
         </div>
 
-        {/* Action buttons inside pane */}
-        <div className="flex items-center gap-1 shrink-0">
+        {/* Line 2: Action Buttons */}
+        <div
+          className={`flex items-center justify-end gap-1.5 pt-1.5 border-t ${
+            isRetro
+              ? 'border-[#808080]/30'
+              : isDark
+              ? 'border-zinc-800/60'
+              : 'border-zinc-200'
+          }`}
+        >
           <button
             onClick={handleCopyHex}
-            className={`px-2 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
+            className={`px-2.5 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
               copiedHex
                 ? 'bg-emerald-600 text-white'
                 : isRetro
@@ -291,15 +300,15 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                 ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
                 : 'bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200'
             }`}
-            title="HEX 복사"
+            title="HEX 데이터 복사"
           >
             {copiedHex ? <Check size={12} /> : <Copy size={12} />}
-            <span className="text-[11px] font-bold font-sans">HEX</span>
+            <span className="text-[11px] font-bold font-sans">HEX 복사</span>
           </button>
 
           <button
             onClick={handleCopyReport}
-            className={`px-2 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
+            className={`px-2.5 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
               copiedReport
                 ? 'bg-emerald-600 text-white'
                 : isRetro
@@ -311,21 +320,21 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
             title="분석 리포트 복사"
           >
             {copiedReport ? <Check size={12} /> : <FileText size={12} />}
-            <span className="text-[11px] font-bold font-sans">리포트</span>
+            <span className="text-[11px] font-bold font-sans">리포트 복사</span>
           </button>
 
           {onApplyToSend && (
             <button
               onClick={() => onApplyToSend(rawHexStr, 'hex')}
-              className={`px-2 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
+              className={`px-2.5 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
                 isRetro
                   ? 'bg-[#000080] text-white hover:bg-blue-900'
-                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-2xs'
               }`}
               title="전송창에 패킷 넣기"
             >
               <ArrowUpRight size={12} />
-              <span className="text-[11px] font-bold font-sans">전송창</span>
+              <span className="text-[11px] font-bold font-sans">전송창에 적용</span>
             </button>
           )}
         </div>
