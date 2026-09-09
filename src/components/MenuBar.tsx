@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { AppTheme } from '../types';
+import { type AppTheme, APP_VERSION } from '../types';
 
 interface MenuBarProps {
   theme: AppTheme;
@@ -113,7 +113,7 @@ export const MenuBar: React.FC<MenuBarProps> = ({
       options: [
         { label: '업데이트 확인...', action: onCheckUpdate },
         { type: 'separator', divider: true },
-        { label: 'COM Analyzer v0.0.12 정보', action: onOpenProtocolHelp },
+        { label: `COM Analyzer v${APP_VERSION} 정보`, action: onOpenProtocolHelp },
         { label: '단축키 안내', action: onOpenProtocolHelp }
       ]
     }
