@@ -86,7 +86,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([bytes[2], bytes[3]]),
       dec: 0,
       description: 'Modbus 프로토콜 식별자 (0x0000 = Modbus TCP 표준)',
-      tagColor: 'zinc'
+      tagColor: 'cyan'
     },
     {
       name: '길이 필드 (Length)',
@@ -95,7 +95,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([bytes[4], bytes[5]]),
       dec: `${lengthField} Bytes`,
       description: `이 필드 이후에 뒤따르는 바이트 수 (Unit ID 1B + PDU ${lengthField - 1}B)`,
-      tagColor: 'zinc'
+      tagColor: 'purple'
     },
     {
       name: '국번 (Unit ID)',
@@ -104,7 +104,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([bytes[6]]),
       dec: unitId,
       description: `Modbus 슬레이브 장치 번호 (국번 ${unitId})`,
-      tagColor: 'indigo'
+      tagColor: 'amber'
     }
   ];
 
@@ -189,7 +189,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([bytes[8], bytes[9]]),
       dec: addr,
       description: `조회 또는 제어할 레지스터 시작 주소 (0x${addr.toString(16).toUpperCase().padStart(4, '0')})`,
-      tagColor: 'amber'
+      tagColor: 'sky'
     });
 
     fields.push({
@@ -201,7 +201,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       description: rawFc === 5 || rawFc === 6
         ? `설정할 단일 값 (0x${qtyOrVal.toString(16).toUpperCase().padStart(4, '0')})`
         : `연속으로 읽어올 레지스터/코일 개수 (${qtyOrVal}개)`,
-      tagColor: 'amber'
+      tagColor: 'teal'
     });
 
     const actionText = rawFc <= 4 ? `읽기 요청 (주소: ${addr}, 수량: ${qtyOrVal}개)` : `쓰기 요청 (주소: ${addr}, 값: ${qtyOrVal})`;
@@ -228,7 +228,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([byteCount]),
       dec: `${byteCount} Bytes`,
       description: `뒤따르는 데이터 바이트의 총 개수 (${Math.floor(byteCount / 2)}개 레지스터)`,
-      tagColor: 'amber'
+      tagColor: 'orange'
     });
 
     if (dataBytes.length > 0) {
@@ -267,7 +267,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([bytes[8], bytes[9]]),
       dec: addr,
       description: `쓰기 성공 확인 시작 주소 (0x${addr.toString(16).toUpperCase().padStart(4, '0')})`,
-      tagColor: 'amber'
+      tagColor: 'sky'
     });
 
     fields.push({
@@ -277,7 +277,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([bytes[10], bytes[11]]),
       dec: valOrQty,
       description: `쓰기 정상 확인 파라미터 (${valOrQty})`,
-      tagColor: 'amber'
+      tagColor: 'teal'
     });
 
     return {
@@ -300,7 +300,7 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       byteRange: [8, bytes.length - 1],
       hex: bytesToHex(bytes.slice(8)),
       description: 'Modbus PDU 데이터 필드',
-      tagColor: 'zinc'
+      tagColor: 'violet'
     });
   }
 
@@ -353,7 +353,7 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([slaveId]),
       dec: slaveId,
       description: `슬레이브 장치 국번 주소 (0x${slaveId.toString(16).toUpperCase().padStart(2, '0')})`,
-      tagColor: 'indigo'
+      tagColor: 'amber'
     }
   ];
 
@@ -397,7 +397,7 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
       hex: bytesToHex([rawFc]),
       dec: `0x${rawFc.toString(16).toUpperCase().padStart(2, '0')} (${rawFc})`,
       description: functionName,
-      tagColor: 'emerald'
+      tagColor: 'blue'
     });
 
     if (bytes.length === 8 && [1, 2, 3, 4, 5, 6].includes(rawFc)) {
@@ -412,7 +412,7 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
         hex: bytesToHex([bytes[2], bytes[3]]),
         dec: addr,
         description: `조회 또는 제어할 레지스터 시작 주소 (0x${addr.toString(16).toUpperCase().padStart(4, '0')})`,
-        tagColor: 'amber'
+        tagColor: 'sky'
       });
 
       fields.push({
@@ -424,7 +424,7 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
         description: rawFc === 5 || rawFc === 6
           ? `설정할 단일 값 (0x${qtyOrVal.toString(16).toUpperCase().padStart(4, '0')})`
           : `연속으로 읽어올 레지스터/코일 개수 (${qtyOrVal}개)`,
-        tagColor: 'amber'
+        tagColor: 'teal'
       });
     } else if ([1, 2, 3, 4].includes(rawFc) && bytes.length >= 5) {
       messageType = 'response';
@@ -439,7 +439,7 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
         hex: bytesToHex([byteCount]),
         dec: `${byteCount} Bytes`,
         description: `뒤따르는 데이터 바이트 수 (${Math.floor(byteCount / 2)}개 레지스터)`,
-        tagColor: 'amber'
+        tagColor: 'orange'
       });
 
       if (dataBytes.length > 0) {

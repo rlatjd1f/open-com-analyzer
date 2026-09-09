@@ -68,6 +68,56 @@ const splitHexInto8ByteLines = (hexStr: string): string[] => {
   return lines;
 };
 
+/**
+ * High-contrast, vibrant palette for packet field identification.
+ * Ensures every individual field gets a uniquely distinct color.
+ */
+interface FieldColorConfig {
+  dotClass: string;
+  streamClass: string;
+}
+
+const FIELD_PALETTES: FieldColorConfig[] = [
+  { dotClass: 'bg-blue-500', streamClass: 'bg-blue-950/80 text-blue-300 border border-blue-500/70' },
+  { dotClass: 'bg-cyan-400', streamClass: 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/70' },
+  { dotClass: 'bg-purple-400', streamClass: 'bg-purple-950/80 text-purple-300 border border-purple-500/70' },
+  { dotClass: 'bg-amber-400', streamClass: 'bg-amber-950/80 text-amber-300 border border-amber-500/70' },
+  { dotClass: 'bg-emerald-400', streamClass: 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/70' },
+  { dotClass: 'bg-orange-400', streamClass: 'bg-orange-950/80 text-orange-300 border border-orange-500/70' },
+  { dotClass: 'bg-pink-400', streamClass: 'bg-pink-950/80 text-pink-300 border border-pink-500/70' },
+  { dotClass: 'bg-teal-400', streamClass: 'bg-teal-950/80 text-teal-300 border border-teal-500/70' },
+  { dotClass: 'bg-rose-400', streamClass: 'bg-rose-950/80 text-rose-300 border border-rose-500/70' },
+  { dotClass: 'bg-indigo-400', streamClass: 'bg-indigo-950/80 text-indigo-300 border border-indigo-500/70' },
+  { dotClass: 'bg-sky-400', streamClass: 'bg-sky-950/80 text-sky-300 border border-sky-500/70' },
+  { dotClass: 'bg-lime-400', streamClass: 'bg-lime-950/80 text-lime-300 border border-lime-500/70' },
+  { dotClass: 'bg-violet-400', streamClass: 'bg-violet-950/80 text-violet-300 border border-violet-500/70' },
+  { dotClass: 'bg-fuchsia-400', streamClass: 'bg-fuchsia-950/80 text-fuchsia-300 border border-fuchsia-500/70' }
+];
+
+const TAG_COLOR_MAP: Record<string, FieldColorConfig> = {
+  blue: { dotClass: 'bg-blue-500', streamClass: 'bg-blue-950/80 text-blue-300 border border-blue-500/70' },
+  cyan: { dotClass: 'bg-cyan-400', streamClass: 'bg-cyan-950/80 text-cyan-300 border border-cyan-500/70' },
+  purple: { dotClass: 'bg-purple-400', streamClass: 'bg-purple-950/80 text-purple-300 border border-purple-500/70' },
+  amber: { dotClass: 'bg-amber-400', streamClass: 'bg-amber-950/80 text-amber-300 border border-amber-500/70' },
+  emerald: { dotClass: 'bg-emerald-400', streamClass: 'bg-emerald-950/80 text-emerald-300 border border-emerald-500/70' },
+  orange: { dotClass: 'bg-orange-400', streamClass: 'bg-orange-950/80 text-orange-300 border border-orange-500/70' },
+  pink: { dotClass: 'bg-pink-400', streamClass: 'bg-pink-950/80 text-pink-300 border border-pink-500/70' },
+  teal: { dotClass: 'bg-teal-400', streamClass: 'bg-teal-950/80 text-teal-300 border border-teal-500/70' },
+  rose: { dotClass: 'bg-rose-500', streamClass: 'bg-rose-950/80 text-rose-300 border border-rose-500/70' },
+  indigo: { dotClass: 'bg-indigo-400', streamClass: 'bg-indigo-950/80 text-indigo-300 border border-indigo-500/70' },
+  sky: { dotClass: 'bg-sky-400', streamClass: 'bg-sky-950/80 text-sky-300 border border-sky-500/70' },
+  lime: { dotClass: 'bg-lime-400', streamClass: 'bg-lime-950/80 text-lime-300 border border-lime-500/70' },
+  violet: { dotClass: 'bg-violet-400', streamClass: 'bg-violet-950/80 text-violet-300 border border-violet-500/70' },
+  fuchsia: { dotClass: 'bg-fuchsia-400', streamClass: 'bg-fuchsia-950/80 text-fuchsia-300 border border-fuchsia-500/70' }
+};
+
+const getFieldColor = (tagColor?: string, fieldIndex: number = 0): FieldColorConfig => {
+  if (tagColor && TAG_COLOR_MAP[tagColor]) {
+    return TAG_COLOR_MAP[tagColor];
+  }
+  return FIELD_PALETTES[fieldIndex % FIELD_PALETTES.length];
+};
+
 const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   packet,
   theme,
@@ -451,6 +501,8 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                     : `[${field.byteRange[0]}..${field.byteRange[1]}]`;
                 const hexLines = splitHexInto8ByteLines(field.hex);
 
+                const fieldColor = getFieldColor(field.tagColor, idx);
+
                 return (
                   <tr
                     key={idx}
@@ -473,17 +525,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                     <td className="py-2 px-3 font-semibold font-sans align-top whitespace-nowrap">
                       <div className="flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
                         <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${
-                            field.tagColor === 'rose'
-                              ? 'bg-rose-500'
-                              : field.tagColor === 'emerald'
-                              ? 'bg-emerald-500'
-                              : field.tagColor === 'amber'
-                              ? 'bg-amber-500'
-                              : field.tagColor === 'blue'
-                              ? 'bg-blue-500'
-                              : 'bg-zinc-500'
-                          }`}
+                          className={`w-2.5 h-2.5 rounded-full shrink-0 shadow-xs ${fieldColor.dotClass}`}
                         />
                         <span className="whitespace-nowrap">{field.name}</span>
                       </div>
@@ -780,12 +822,19 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
         >
           <div className="flex flex-wrap items-center gap-1">
             {packetBytes.map((b, idx) => {
-              const matchingField = analysis?.fields.find(
+              const matchingFieldIndex = analysis?.fields.findIndex(
                 (f) => idx >= f.byteRange[0] && idx <= f.byteRange[1]
               );
+              const matchingField = matchingFieldIndex !== undefined && matchingFieldIndex >= 0
+                ? analysis?.fields[matchingFieldIndex]
+                : undefined;
               const isHighlighted = selectedField
                 ? idx >= selectedField.byteRange[0] && idx <= selectedField.byteRange[1]
                 : false;
+
+              const fieldColor = matchingField
+                ? getFieldColor(matchingField.tagColor, matchingFieldIndex)
+                : null;
 
               return (
                 <div
@@ -797,14 +846,8 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                   className={`group relative flex flex-col items-center justify-center p-0.5 rounded min-w-[28px] cursor-pointer transition-all ${
                     isHighlighted
                       ? 'ring-2 ring-indigo-400 bg-indigo-600 text-white scale-110 z-10 shadow-lg'
-                      : matchingField?.tagColor === 'rose'
-                      ? 'bg-rose-950/70 text-rose-300 border border-rose-700/60 hover:scale-105'
-                      : matchingField?.tagColor === 'emerald'
-                      ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 hover:scale-105'
-                      : matchingField?.tagColor === 'amber'
-                      ? 'bg-amber-950/70 text-amber-300 border border-amber-700/60 hover:scale-105'
-                      : matchingField?.tagColor === 'blue'
-                      ? 'bg-sky-950/70 text-sky-300 border border-sky-700/60 hover:scale-105'
+                      : fieldColor
+                      ? `${fieldColor.streamClass} hover:scale-105`
                       : 'bg-zinc-800/80 text-zinc-300 border border-zinc-700/60 hover:scale-105'
                   }`}
                 >
