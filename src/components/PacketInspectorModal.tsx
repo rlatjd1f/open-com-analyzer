@@ -4,6 +4,7 @@ import {
   analyzePacket,
   guessModbusDataType,
   decodeRegisterPayload,
+  decodeMixedRegisterPayload,
   type ParsedPacketResult,
   type PacketField,
   type HeuristicTypeGuess,
@@ -135,7 +136,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   const [selectedField, setSelectedField] = useState<PacketField | null>(null);
 
   // Register Payload Decoder Settings State
-  const [unitSize, setUnitSize] = useState<2 | 4 | 8>(4);
+  const [unitSize, setUnitSize] = useState<2 | 4 | 8 | 'mixed'>('mixed');
   const [dataType, setDataType] = useState<string>('float32');
   const [byteOrder, setByteOrder] = useState<string>('ABCD');
 
@@ -166,14 +167,13 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   // Auto-initialize register format settings based on heuristic guess when packet opens
   useEffect(() => {
     if (typeGuess) {
-      setUnitSize(typeGuess.unitSize);
       setDataType(typeGuess.dataType);
       setByteOrder(typeGuess.byteOrder);
     }
   }, [typeGuess]);
 
   // Handle unit size changes
-  const handleUnitSizeChange = (newSize: 2 | 4 | 8) => {
+  const handleUnitSizeChange = (newSize: 2 | 4 | 8 | 'mixed') => {
     setUnitSize(newSize);
     if (newSize === 2) {
       setDataType('uint16');
@@ -190,6 +190,10 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   // Decode Register Rows
   const decodedRegisters = useMemo<DecodedRegisterRow[]>(() => {
     if (!analysis?.registerPayload || analysis.registerPayload.length === 0) return [];
+    if (unitSize === 'mixed') {
+      const preferredEndian = (byteOrder === 'CDAB' ? 'CDAB' : 'ABCD') as 'ABCD' | 'CDAB';
+      return decodeMixedRegisterPayload(analysis.registerPayload, preferredEndian, 0);
+    }
     return decodeRegisterPayload(analysis.registerPayload, unitSize, dataType, byteOrder, 0);
   }, [analysis?.registerPayload, unitSize, dataType, byteOrder]);
 
@@ -232,9 +236,14 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
 
     if (decodedRegisters.length > 0) {
       lines.push(``);
-      lines.push(`[레지스터 디코딩 (${unitSize}B 단위 / ${dataType} / ${byteOrder})]`);
+      lines.push(
+        unitSize === 'mixed'
+          ? `[레지스터 디코딩 (지능형 자동 복합 / 실수순서: ${byteOrder})]`
+          : `[레지스터 디코딩 (${unitSize}B 단위 / ${dataType} / ${byteOrder})]`
+      );
       decodedRegisters.forEach((row) => {
-        lines.push(`${row.registerRangeLabel} (${row.byteOffsetLabel}): ${row.formattedValue} [HEX: ${row.hex}]`);
+        const typeInfo = row.typeBadge ? ` [${row.typeBadge}]` : '';
+        lines.push(`${row.registerRangeLabel} (${row.byteOffsetLabel}): ${row.formattedValue}${typeInfo} [HEX: ${row.hex}]`);
       });
     }
 
@@ -250,8 +259,8 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   const handleCopyAllRegisters = () => {
     if (decodedRegisters.length === 0) return;
     const lines = [
-      `레지스터\t오프셋\tHEX\t값(${dataType})`,
-      ...decodedRegisters.map((r) => `${r.registerRangeLabel}\t${r.byteOffsetLabel}\t${r.hex}\t${r.formattedValue}`)
+      `레지스터\t오프셋\t타입\tHEX\t값`,
+      ...decodedRegisters.map((r) => `${r.registerRangeLabel}\t${r.byteOffsetLabel}\t${r.typeBadge || `${unitSize}B`}\t${r.hex}\t${r.formattedValue}`)
     ];
     navigator.clipboard.writeText(lines.join('\n'));
     setCopiedRegs(true);
@@ -613,6 +622,18 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
               <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">크기:</span>
               <div className="inline-flex rounded p-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[10px]">
                 <button
+                  onClick={() => handleUnitSizeChange('mixed')}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                    unitSize === 'mixed'
+                      ? 'bg-emerald-600 text-white shadow-2xs'
+                      : 'text-zinc-500 hover:text-zinc-200'
+                  }`}
+                  title="2B 정수와 4B 부동소수점(Float)을 바이트 패턴에 따라 지능형으로 자동 분할 분석"
+                >
+                  <Sparkles size={10} />
+                  <span>자동복합</span>
+                </button>
+                <button
                   onClick={() => handleUnitSizeChange(2)}
                   className={`px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
                     unitSize === 2
@@ -645,9 +666,10 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
               </div>
             </div>
 
-            {/* Data Type Selector */}
-            <div className="flex items-center gap-1">
-              <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">형식:</span>
+            {/* Data Type Selector (Only in manual 2B / 4B / 8B modes) */}
+            {unitSize !== 'mixed' && (
+              <div className="flex items-center gap-1">
+                <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">형식:</span>
               <select
                 value={dataType}
                 onChange={(e) => setDataType(e.target.value)}
@@ -684,10 +706,13 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                 )}
               </select>
             </div>
+          )}
 
             {/* Endianness Selector */}
             <div className="flex items-center gap-1">
-              <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">순서:</span>
+              <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">
+                {unitSize === 'mixed' ? '실수순서:' : '순서:'}
+              </span>
               <select
                 value={byteOrder}
                 onChange={(e) => setByteOrder(e.target.value)}
@@ -699,6 +724,12 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                     : 'bg-zinc-50 text-zinc-900 border-zinc-300'
                 }`}
               >
+                {unitSize === 'mixed' && (
+                  <>
+                    <option value="ABCD">ABCD (Big-Endian Float)</option>
+                    <option value="CDAB">CDAB (Word-Swap Float)</option>
+                  </>
+                )}
                 {unitSize === 2 && (
                   <>
                     <option value="AB">AB (Big-Endian)</option>
@@ -766,8 +797,11 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                   <th className="py-1 px-2 w-10 text-center">No</th>
                   <th className="py-1 px-2 w-24">레지스터</th>
                   <th className="py-1 px-2 w-20">오프셋</th>
+                  <th className="py-1 px-2 w-24">타입</th>
                   <th className="py-1 px-2 w-28">HEX</th>
-                  <th className="py-1 px-2">변환 값 ({dataType.toUpperCase()})</th>
+                  <th className="py-1 px-2">
+                    변환 값 {unitSize === 'mixed' ? '(지능형 판별)' : `(${dataType.toUpperCase()})`}
+                  </th>
                   <th className="py-1 px-2 w-10 text-center">복사</th>
                 </tr>
               </thead>
@@ -780,11 +814,28 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                     }`}
                   >
                     <td className="py-1 px-2 text-center text-zinc-400">{row.index + 1}</td>
-                    <td className="py-1 px-2 font-bold text-indigo-500 dark:text-indigo-400">
+                    <td className="py-1 px-2 font-bold text-indigo-500 dark:text-indigo-400 whitespace-nowrap">
                       {row.registerRangeLabel}
                     </td>
-                    <td className="py-1 px-2 text-amber-500 dark:text-amber-400">{row.byteOffsetLabel}</td>
-                    <td className="py-1 px-2 font-semibold text-zinc-500 dark:text-zinc-400">{row.hex}</td>
+                    <td className="py-1 px-2 text-amber-500 dark:text-amber-400 whitespace-nowrap">{row.byteOffsetLabel}</td>
+                    <td className="py-1 px-2 whitespace-nowrap">
+                      {row.typeBadge ? (
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-bold border ${
+                            row.unitSize === 4
+                              ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                              : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border-indigo-500/30'
+                          }`}
+                        >
+                          {row.typeBadge}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-400 text-[10px] font-mono">
+                          {unitSize}B
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-1 px-2 font-semibold text-zinc-500 dark:text-zinc-400 font-mono whitespace-nowrap">{row.hex}</td>
                     <td className="py-1 px-2 font-bold text-emerald-600 dark:text-emerald-400">
                       {row.formattedValue}
                     </td>

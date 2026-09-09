@@ -578,6 +578,11 @@ export interface DecodedRegisterRow {
   formattedValue: string;
   rawValue: number | bigint | string;
   binaryStr?: string;
+  unitSize?: 2 | 4 | 8;
+  dataType?: string;
+  byteOrder?: string;
+  typeBadge?: string;
+  isAutoDetected?: boolean;
 }
 
 export interface HeuristicTypeGuess {
@@ -864,8 +869,148 @@ export function decodeRegisterPayload(
       byteOffsetLabel,
       hex: hexStr,
       formattedValue,
-      rawValue
+      rawValue,
+      unitSize,
+      dataType,
+      byteOrder
     });
+  }
+
+  return rows;
+}
+
+/**
+ * Intelligent auto-segmentation of Modbus register payload.
+ * Scans byte array and dynamically determines whether each register pair is a 32-bit Float
+ * or a single 16-bit Integer/Status code, correctly handling mixed registers.
+ */
+export function decodeMixedRegisterPayload(
+  bytes: number[],
+  preferredFloatEndian: 'ABCD' | 'CDAB' = 'ABCD',
+  startRegisterOffset: number = 0
+): DecodedRegisterRow[] {
+  if (!bytes || bytes.length === 0) return [];
+
+  const rows: DecodedRegisterRow[] = [];
+  let byteOffset = 0;
+  let regIndex = 0;
+
+  // Helper to test if a 4-byte chunk is a plausible IEEE 754 float
+  const testFloat = (b0: number, b1: number, b2: number, b3: number, endian: 'ABCD' | 'CDAB') => {
+    let ordered: [number, number, number, number];
+    if (endian === 'CDAB') {
+      ordered = [b2, b3, b0, b1];
+    } else {
+      ordered = [b0, b1, b2, b3];
+    }
+    const exp = ((ordered[0] & 0x7F) << 1) | ((ordered[1] & 0x80) >> 7);
+    // Plausible sensor/instrument physical values (roughly 10^-14 to 10^14)
+    if (exp >= 80 && exp <= 165) {
+      const buf = new ArrayBuffer(4);
+      const view = new DataView(buf);
+      ordered.forEach((b, i) => view.setUint8(i, b));
+      const val = view.getFloat32(0, false);
+      if (!isNaN(val) && isFinite(val) && Math.abs(val) < 1e12) {
+        return { isFloat: true, val };
+      }
+    }
+    return { isFloat: false, val: 0 };
+  };
+
+  while (byteOffset < bytes.length) {
+    const bytesRemaining = bytes.length - byteOffset;
+
+    // Can we evaluate 4 bytes (2 registers)?
+    if (bytesRemaining >= 4) {
+      const b0 = bytes[byteOffset];
+      const b1 = bytes[byteOffset + 1];
+      const b2 = bytes[byteOffset + 2];
+      const b3 = bytes[byteOffset + 3];
+
+      // 1. Check preferred float endian first
+      let floatResult = testFloat(b0, b1, b2, b3, preferredFloatEndian);
+      let detectedEndian = preferredFloatEndian;
+
+      // If preferred didn't match, test alternative endian
+      if (!floatResult.isFloat) {
+        const altEndian: 'ABCD' | 'CDAB' = preferredFloatEndian === 'ABCD' ? 'CDAB' : 'ABCD';
+        const altResult = testFloat(b0, b1, b2, b3, altEndian);
+        if (altResult.isFloat) {
+          floatResult = altResult;
+          detectedEndian = altEndian;
+        }
+      }
+
+      // If plausible float detected, emit 4-byte Float32 row
+      if (floatResult.isFloat) {
+        const rawChunk = bytes.slice(byteOffset, byteOffset + 4);
+        const hexStr = rawChunk.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+        const regStart = startRegisterOffset + regIndex;
+        const regEnd = regStart + 1;
+        const val = floatResult.val;
+        const formattedValue = Number.isInteger(val) ? val.toFixed(1) : parseFloat(val.toPrecision(7)).toString();
+
+        rows.push({
+          index: rows.length,
+          registerRangeLabel: `Reg #${regStart}~#${regEnd}`,
+          byteOffsetLabel: `[${byteOffset}~${byteOffset + 3}]`,
+          hex: hexStr,
+          formattedValue,
+          rawValue: val,
+          unitSize: 4,
+          dataType: 'float32',
+          byteOrder: detectedEndian,
+          typeBadge: `Float32 (${detectedEndian})`,
+          isAutoDetected: true
+        });
+
+        byteOffset += 4;
+        regIndex += 2;
+        continue;
+      }
+    }
+
+    // Fallback: 2-byte UInt16 register
+    if (bytesRemaining >= 2) {
+      const rawChunk = bytes.slice(byteOffset, byteOffset + 2);
+      const hexStr = rawChunk.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+      const val = (rawChunk[0] << 8) | rawChunk[1];
+      const regStart = startRegisterOffset + regIndex;
+
+      rows.push({
+        index: rows.length,
+        registerRangeLabel: `Reg #${regStart}`,
+        byteOffsetLabel: `[${byteOffset}~${byteOffset + 1}]`,
+        hex: hexStr,
+        formattedValue: String(val),
+        rawValue: val,
+        unitSize: 2,
+        dataType: 'uint16',
+        byteOrder: 'AB',
+        typeBadge: 'UInt16',
+        isAutoDetected: true
+      });
+
+      byteOffset += 2;
+      regIndex += 1;
+    } else {
+      // 1 dangling odd byte if any
+      const rawChunk = [bytes[byteOffset]];
+      const hexStr = rawChunk[0].toString(16).toUpperCase().padStart(2, '0');
+      rows.push({
+        index: rows.length,
+        registerRangeLabel: `Byte #${byteOffset}`,
+        byteOffsetLabel: `[${byteOffset}]`,
+        hex: hexStr,
+        formattedValue: String(rawChunk[0]),
+        rawValue: rawChunk[0],
+        unitSize: 2,
+        dataType: 'raw',
+        typeBadge: '1 Byte',
+        isAutoDetected: true
+      });
+      byteOffset += 1;
+    }
   }
 
   return rows;
