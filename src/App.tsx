@@ -710,6 +710,7 @@ export const App: React.FC = () => {
         onClose={() => setInspectingPacket(null)}
         theme={theme}
         packet={inspectingPacket}
+        allPackets={packets}
         onApplyToSend={(dataStr) => setInsertedData(dataStr)}
       />
     </div>

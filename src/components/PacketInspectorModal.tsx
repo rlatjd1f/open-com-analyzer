@@ -1,20 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import type { AppTheme, Packet } from '../types';
-import {
-  X,
-  Search,
-  Check,
-  Copy,
-  ArrowUpRight,
-  ShieldCheck,
-  ShieldAlert,
-  Layers,
-  FileText,
-  Terminal,
-  Activity,
-  Sparkles,
-  Database
-} from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { Packet, AppTheme } from '../types';
 import {
   analyzePacket,
   guessModbusDataType,
@@ -24,26 +9,56 @@ import {
   type HeuristicTypeGuess,
   type DecodedRegisterRow
 } from '../utils/packetParser';
+import { findPairedPacket, type PacketPairInfo } from '../utils/packetPairing';
 import { hexStringToBytes } from '../utils/crc';
+import {
+  X,
+  Copy,
+  Check,
+  Search,
+  Activity,
+  ShieldCheck,
+  ShieldAlert,
+  Database,
+  Terminal,
+  Layers,
+  ArrowUpRight,
+  Sparkles,
+  FileText,
+  Clock,
+  ArrowRightLeft,
+  Send,
+  Download
+} from 'lucide-react';
 
 interface PacketInspectorModalProps {
   isOpen: boolean;
   onClose: () => void;
   theme: AppTheme;
   packet: Packet | null;
+  allPackets?: Packet[];
   onApplyToSend?: (data: string, format: 'hex' | 'ascii') => void;
 }
 
-export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
-  isOpen,
-  onClose,
-  theme,
+interface PacketInspectPaneProps {
+  packet: Packet;
+  theme: AppTheme;
+  isRetro: boolean;
+  isDark: boolean;
+  isDual: boolean;
+  role: 'tx' | 'rx' | 'standalone';
+  onApplyToSend?: (data: string, format: 'hex' | 'ascii') => void;
+}
+
+const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   packet,
+  theme,
+  isRetro,
+  isDark,
+  isDual,
+  role,
   onApplyToSend
 }) => {
-  const isRetro = theme.name === 'classic-retro';
-  const isDark = theme.name === 'modern-dark';
-
   const [copiedHex, setCopiedHex] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
   const [copiedRegs, setCopiedRegs] = useState(false);
@@ -54,18 +69,6 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
   const [unitSize, setUnitSize] = useState<2 | 4 | 8>(4);
   const [dataType, setDataType] = useState<string>('float32');
   const [byteOrder, setByteOrder] = useState<string>('ABCD');
-
-  // Close modal on ESC key press
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
 
   // Normalize packet bytes
   const packetBytes = useMemo<number[]>(() => {
@@ -100,7 +103,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
     }
   }, [typeGuess]);
 
-  // Handle unit size changes & auto-adjust data type / byte order to sensible defaults
+  // Handle unit size changes
   const handleUnitSizeChange = (newSize: 2 | 4 | 8) => {
     setUnitSize(newSize);
     if (newSize === 2) {
@@ -121,9 +124,8 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
     return decodeRegisterPayload(analysis.registerPayload, unitSize, dataType, byteOrder, 0);
   }, [analysis?.registerPayload, unitSize, dataType, byteOrder]);
 
-  if (!isOpen || !packet) return null;
+  const rawHexStr = packetBytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 
-  // Format timestamp
   const formatTimestamp = (ts: number) => {
     const d = new Date(ts);
     const hh = String(d.getHours()).padStart(2, '0');
@@ -132,8 +134,6 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
     const sss = String(d.getMilliseconds()).padStart(3, '0');
     return `${hh}:${mm}:${ss}.${sss}`;
   };
-
-  const rawHexStr = packetBytes.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
 
   const handleCopyHex = () => {
     if (!rawHexStr) return;
@@ -146,7 +146,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
     if (!analysis) return;
     const isRx = packet.direction === 'rx';
     const lines = [
-      `=== [패킷 분석 리포트] ===`,
+      `=== [패킷 분석 리포트 - ${isRx ? 'RX 수신' : 'TX 송신'}] ===`,
       `방향: ${isRx ? 'RX (수신)' : 'TX (송신)'}`,
       `시간: ${formatTimestamp(packet.timestamp)}`,
       `크기: ${packetBytes.length} Bytes`,
@@ -198,9 +198,641 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
   const isRx = packet.direction === 'rx';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+    <div className={`flex flex-col gap-3.5 ${isDual ? 'px-3 py-1' : ''}`}>
+      {/* Pane Sub-header: Direction & Key Stats */}
       <div
-        className={`relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-lg shadow-2xl overflow-hidden border ${
+        className={`flex items-center justify-between p-2.5 rounded-lg border select-none ${
+          isRetro
+            ? 'bg-white border-[#808080]'
+            : isDark
+            ? isRx
+              ? 'bg-emerald-950/20 border-emerald-800/40'
+              : 'bg-indigo-950/20 border-indigo-800/40'
+            : isRx
+            ? 'bg-emerald-50/70 border-emerald-200'
+            : 'bg-indigo-50/70 border-indigo-200'
+        }`}
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            style={{
+              backgroundColor: isRx ? theme.rxColor : theme.txColor,
+              color: theme.textColor || '#000'
+            }}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-black uppercase shadow-2xs"
+          >
+            {isRx ? <Download size={12} /> : <Send size={12} />}
+            <span>{role === 'tx' ? 'TX (송신 요청)' : role === 'rx' ? 'RX (수신 응답)' : isRx ? 'RX (수신)' : 'TX (송신)'}</span>
+          </span>
+
+          <span
+            className={`font-mono text-xs px-2 py-0.5 rounded ${
+              isRetro
+                ? 'bg-black/10 text-black'
+                : isDark
+                ? 'bg-zinc-800/90 text-zinc-300 border border-zinc-700'
+                : 'bg-white text-zinc-700 border border-zinc-300'
+            }`}
+          >
+            {formatTimestamp(packet.timestamp)}
+          </span>
+
+          <span
+            className={`font-mono text-xs px-2 py-0.5 rounded font-bold ${
+              isRetro
+                ? 'bg-[#15213b] text-[#55f2ff]'
+                : isDark
+                ? 'bg-zinc-950 text-amber-400 border border-zinc-700'
+                : 'bg-white text-amber-600 border border-amber-200'
+            }`}
+          >
+            {packetBytes.length} Bytes
+          </span>
+
+          {analysis && (
+            <span
+              className={`text-xs px-2 py-0.5 rounded font-bold border ${
+                analysis.protocol === 'modbus-tcp'
+                  ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
+                  : analysis.protocol === 'modbus-rtu'
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                  : 'bg-purple-500/20 text-purple-400 border-purple-500/40'
+              }`}
+            >
+              {analysis.protocolLabel}
+            </span>
+          )}
+        </div>
+
+        {/* Action buttons inside pane */}
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleCopyHex}
+            className={`p-1.5 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
+              copiedHex
+                ? 'bg-emerald-600 text-white'
+                : isRetro
+                ? 'bg-[#ece9d8] border border-[#808080] hover:bg-white text-black'
+                : isDark
+                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
+                : 'bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200'
+            }`}
+            title="HEX 복사"
+          >
+            {copiedHex ? <Check size={12} /> : <Copy size={12} />}
+            <span className="text-[11px] font-bold font-sans">HEX</span>
+          </button>
+
+          <button
+            onClick={handleCopyReport}
+            className={`p-1.5 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
+              copiedReport
+                ? 'bg-emerald-600 text-white'
+                : isRetro
+                ? 'bg-[#ece9d8] border border-[#808080] hover:bg-white text-black'
+                : isDark
+                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
+                : 'bg-white hover:bg-zinc-100 text-zinc-700 border border-zinc-200'
+            }`}
+            title="분석 리포트 복사"
+          >
+            {copiedReport ? <Check size={12} /> : <FileText size={12} />}
+            <span className="text-[11px] font-bold font-sans">리포트</span>
+          </button>
+
+          {!isRx && onApplyToSend && (
+            <button
+              onClick={() => onApplyToSend(rawHexStr, 'hex')}
+              className={`p-1.5 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
+                isRetro
+                  ? 'bg-[#000080] text-white hover:bg-blue-900'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+              }`}
+              title="전송창에 패킷 넣기"
+            >
+              <ArrowUpRight size={12} />
+              <span className="text-[11px] font-bold font-sans">전송창</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Summary Banner */}
+      {analysis && (
+        <div
+          className={`p-2.5 rounded-md border flex items-start gap-2.5 shadow-2xs ${
+            analysis.isValidCrc === false
+              ? isDark
+                ? 'bg-rose-950/30 border-rose-800/60 text-rose-200'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
+              : analysis.protocol === 'modbus-tcp'
+              ? isDark
+                ? 'bg-sky-950/30 border-sky-800/60 text-sky-200'
+                : 'bg-sky-50 border-sky-200 text-sky-900'
+              : analysis.protocol === 'modbus-rtu'
+              ? isDark
+                ? 'bg-emerald-950/30 border-emerald-800/60 text-emerald-200'
+                : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              : isDark
+              ? 'bg-zinc-900/80 border-zinc-700/80 text-zinc-200'
+              : 'bg-slate-50 border-slate-200 text-slate-900'
+          }`}
+        >
+          <div className="mt-0.5 shrink-0">
+            {analysis.isValidCrc === false ? (
+              <ShieldAlert size={18} className="text-rose-400" />
+            ) : analysis.isModbus ? (
+              <ShieldCheck size={18} className="text-emerald-400" />
+            ) : (
+              <Activity size={18} className="text-indigo-400" />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-bold text-xs flex items-center gap-2 flex-wrap">
+              <span>{analysis.summary}</span>
+              {analysis.isValidCrc === true && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-normal border border-emerald-500/30">
+                  CRC-16 정상
+                </span>
+              )}
+              {analysis.isValidCrc === false && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
+                  CRC-16 불일치
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REGISTER PAYLOAD DECODER SECTION (2B / 4B / 8B / Float / Int) */}
+      {analysis?.registerPayload && analysis.registerPayload.length >= 2 && (
+        <div
+          className={`p-3 rounded-lg border space-y-2.5 ${
+            isRetro
+              ? 'bg-[#ece9d8] border-[#808080] shadow-sm'
+              : isDark
+              ? 'bg-zinc-900/90 border-indigo-500/30 shadow-md'
+              : 'bg-indigo-50/40 border-indigo-200 shadow-xs'
+          }`}
+        >
+          {/* Section Header & Heuristic Auto-Detect Banner */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Database size={15} className="text-indigo-500 dark:text-indigo-400" />
+              <span className="font-bold text-xs uppercase tracking-wider">
+                레지스터 데이터 디코더
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-500 dark:text-indigo-300 font-bold border border-indigo-500/20">
+                {analysis.registerPayload.length}B ({Math.floor(analysis.registerPayload.length / 2)}개 레지스터)
+              </span>
+            </div>
+
+            {typeGuess && (
+              <div className="flex items-center gap-1 text-xs">
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold text-[11px] border border-emerald-500/30">
+                  <Sparkles size={11} className="shrink-0" />
+                  <span>추천: {typeGuess.label}</span>
+                </span>
+                {(unitSize !== typeGuess.unitSize || dataType !== typeGuess.dataType || byteOrder !== typeGuess.byteOrder) && (
+                  <button
+                    onClick={() => {
+                      setUnitSize(typeGuess.unitSize);
+                      setDataType(typeGuess.dataType);
+                      setByteOrder(typeGuess.byteOrder);
+                    }}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-500 font-bold transition-all cursor-pointer"
+                  >
+                    적용
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Controls Bar: Unit Size, Data Type, Byte Order */}
+          <div
+            className={`p-2 rounded border flex flex-wrap items-center justify-between gap-2 text-xs ${
+              isRetro
+                ? 'bg-white border-[#808080]'
+                : isDark
+                ? 'bg-zinc-950/80 border-zinc-800'
+                : 'bg-white border-zinc-200'
+            }`}
+          >
+            {/* Unit Size Selector */}
+            <div className="flex items-center gap-1">
+              <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">크기:</span>
+              <div className="inline-flex rounded p-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 text-[10px]">
+                <button
+                  onClick={() => handleUnitSizeChange(2)}
+                  className={`px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                    unitSize === 2
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-zinc-500 hover:text-zinc-200'
+                  }`}
+                >
+                  2B
+                </button>
+                <button
+                  onClick={() => handleUnitSizeChange(4)}
+                  className={`px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                    unitSize === 4
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-zinc-500 hover:text-zinc-200'
+                  }`}
+                >
+                  4B
+                </button>
+                <button
+                  onClick={() => handleUnitSizeChange(8)}
+                  className={`px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
+                    unitSize === 8
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-zinc-500 hover:text-zinc-200'
+                  }`}
+                >
+                  8B
+                </button>
+              </div>
+            </div>
+
+            {/* Data Type Selector */}
+            <div className="flex items-center gap-1">
+              <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">형식:</span>
+              <select
+                value={dataType}
+                onChange={(e) => setDataType(e.target.value)}
+                className={`h-6 px-1.5 font-mono text-[11px] rounded border outline-none font-bold cursor-pointer ${
+                  isRetro
+                    ? 'bg-white text-black border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-800 text-zinc-100 border-zinc-700'
+                    : 'bg-zinc-50 text-zinc-900 border-zinc-300'
+                }`}
+              >
+                {unitSize === 2 && (
+                  <>
+                    <option value="uint16">UInt16 (정수 0~65535)</option>
+                    <option value="int16">Int16 (부호정수)</option>
+                    <option value="hex">HEX (16진수)</option>
+                    <option value="binary">Binary (2진수)</option>
+                  </>
+                )}
+                {unitSize === 4 && (
+                  <>
+                    <option value="float32">Float32 (IEEE 754 실수)</option>
+                    <option value="uint32">UInt32 (32비트 정수)</option>
+                    <option value="int32">Int32 (부호 정수)</option>
+                    <option value="hex">HEX (32비트)</option>
+                  </>
+                )}
+                {unitSize === 8 && (
+                  <>
+                    <option value="float64">Double (64비트 실수)</option>
+                    <option value="uint64">UInt64 (64비트 정수)</option>
+                    <option value="int64">Int64 (부호 정수)</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* Endianness Selector */}
+            <div className="flex items-center gap-1">
+              <span className="font-bold text-zinc-500 dark:text-zinc-400 text-[11px] select-none">순서:</span>
+              <select
+                value={byteOrder}
+                onChange={(e) => setByteOrder(e.target.value)}
+                className={`h-6 px-1.5 font-mono text-[11px] rounded border outline-none font-bold cursor-pointer ${
+                  isRetro
+                    ? 'bg-white text-black border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-800 text-zinc-100 border-zinc-700'
+                    : 'bg-zinc-50 text-zinc-900 border-zinc-300'
+                }`}
+              >
+                {unitSize === 2 && (
+                  <>
+                    <option value="AB">AB (Big-Endian)</option>
+                    <option value="BA">BA (Little-Endian)</option>
+                  </>
+                )}
+                {unitSize === 4 && (
+                  <>
+                    <option value="ABCD">ABCD (Big-Endian)</option>
+                    <option value="CDAB">CDAB (Word-Swap)</option>
+                    <option value="BADC">BADC (Byte-Swap)</option>
+                    <option value="DCBA">DCBA (Little-Endian)</option>
+                  </>
+                )}
+                {unitSize === 8 && (
+                  <>
+                    <option value="ABCDEFGH">ABCDEFGH (표준)</option>
+                    <option value="GHEFCDAB">GHEFCDAB (Word-Swap)</option>
+                    <option value="HGFEDCBA">HGFEDCBA (Little-Endian)</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* Batch Copy Button */}
+            <button
+              onClick={handleCopyAllRegisters}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold transition-all shadow-2xs cursor-pointer ${
+                copiedRegs
+                  ? 'bg-emerald-600 text-white'
+                  : isRetro
+                  ? 'bg-[#d4d0c8] border border-[#808080] text-black hover:bg-white'
+                  : isDark
+                  ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700'
+                  : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-300'
+              }`}
+              title="전체 디코딩 레지스터 표를 TSV 텍스트로 복사"
+            >
+              {copiedRegs ? <Check size={11} /> : <Copy size={11} />}
+              <span>{copiedRegs ? '복사됨' : '표 복사'}</span>
+            </button>
+          </div>
+
+          {/* Decoded Registers Table */}
+          <div
+            className={`max-h-52 overflow-y-auto rounded border font-mono text-xs ${
+              isRetro
+                ? 'bg-white border-[#808080]'
+                : isDark
+                ? 'bg-zinc-950 border-zinc-800'
+                : 'bg-white border-zinc-200'
+            }`}
+          >
+            <table className="w-full text-left border-collapse">
+              <thead className="sticky top-0 z-10 select-none">
+                <tr
+                  className={`border-b text-[10px] font-bold ${
+                    isRetro
+                      ? 'bg-[#ece9d8] text-black border-[#808080]'
+                      : isDark
+                      ? 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                  }`}
+                >
+                  <th className="py-1 px-2 w-10 text-center">No</th>
+                  <th className="py-1 px-2 w-24">레지스터</th>
+                  <th className="py-1 px-2 w-20">오프셋</th>
+                  <th className="py-1 px-2 w-28">HEX</th>
+                  <th className="py-1 px-2">변환 값 ({dataType.toUpperCase()})</th>
+                  <th className="py-1 px-2 w-10 text-center">복사</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60 text-[11px]">
+                {decodedRegisters.map((row) => (
+                  <tr
+                    key={row.index}
+                    className={`transition-colors ${
+                      isDark ? 'hover:bg-zinc-900/60 text-zinc-300' : 'hover:bg-zinc-50 text-zinc-700'
+                    }`}
+                  >
+                    <td className="py-1 px-2 text-center text-zinc-400">{row.index + 1}</td>
+                    <td className="py-1 px-2 font-bold text-indigo-500 dark:text-indigo-400">
+                      {row.registerRangeLabel}
+                    </td>
+                    <td className="py-1 px-2 text-amber-500 dark:text-amber-400">{row.byteOffsetLabel}</td>
+                    <td className="py-1 px-2 font-semibold text-zinc-500 dark:text-zinc-400">{row.hex}</td>
+                    <td className="py-1 px-2 font-bold text-emerald-600 dark:text-emerald-400">
+                      {row.formattedValue}
+                    </td>
+                    <td className="py-1 px-2 text-center">
+                      <button
+                        onClick={() => handleCopySingleRegister(row.formattedValue, row.index)}
+                        className="p-0.5 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+                        title="값 복사"
+                      >
+                        {copiedRegIndex === row.index ? (
+                          <Check size={11} className="text-emerald-500" />
+                        ) : (
+                          <Copy size={11} className="text-zinc-400 hover:text-zinc-200" />
+                        )}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Frame Field Breakdown Table */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-80">
+            <Layers size={13} className="text-indigo-400" />
+            프레임 필드 구조 분석 (Field Breakdown)
+          </span>
+          <span className="text-[10px] opacity-60">총 {analysis?.fields.length || 0}개 필드</span>
+        </div>
+
+        <div
+          className={`rounded border overflow-hidden ${
+            isRetro
+              ? 'bg-white border-[#808080]'
+              : isDark
+              ? 'bg-zinc-900/80 border-zinc-800'
+              : 'bg-white border-zinc-200 shadow-2xs'
+          }`}
+        >
+          <table className="w-full text-left text-[11px] border-collapse font-mono">
+            <thead>
+              <tr
+                className={`border-b select-none text-[10px] font-bold ${
+                  isRetro
+                    ? 'bg-[#ece9d8] text-black border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700'
+                    : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                }`}
+              >
+                <th className="py-1 px-2 w-8 text-center">No</th>
+                <th className="py-1 px-2 w-16 text-center">오프셋</th>
+                <th className="py-1 px-2 w-36">필드명</th>
+                <th className="py-1 px-2 w-28">HEX</th>
+                <th className="py-1 px-2 w-24">파싱 값</th>
+                <th className="py-1 px-2">설명</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {analysis?.fields.map((field, idx) => {
+                const isSelected = selectedField?.name === field.name;
+                const rangeStr =
+                  field.byteRange[0] === field.byteRange[1]
+                    ? `[${field.byteRange[0]}]`
+                    : `[${field.byteRange[0]}..${field.byteRange[1]}]`;
+
+                return (
+                  <tr
+                    key={idx}
+                    onClick={() => setSelectedField(field)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? isDark
+                          ? 'bg-indigo-950/40 text-indigo-200'
+                          : 'bg-indigo-50 text-indigo-900'
+                        : isDark
+                        ? 'hover:bg-zinc-800/50 text-zinc-300'
+                        : 'hover:bg-zinc-50 text-zinc-700'
+                    }`}
+                  >
+                    <td className="py-1.5 px-2 text-center text-zinc-400">{idx + 1}</td>
+                    <td className="py-1.5 px-2 text-center font-bold text-amber-500 dark:text-amber-400">
+                      {rangeStr}
+                    </td>
+                    <td className="py-1.5 px-2 font-semibold font-sans flex items-center gap-1">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          field.tagColor === 'rose'
+                            ? 'bg-rose-500'
+                            : field.tagColor === 'emerald'
+                            ? 'bg-emerald-500'
+                            : field.tagColor === 'amber'
+                            ? 'bg-amber-500'
+                            : field.tagColor === 'blue'
+                            ? 'bg-blue-500'
+                            : 'bg-zinc-500'
+                        }`}
+                      />
+                      <span className="truncate">{field.name}</span>
+                    </td>
+                    <td className="py-1.5 px-2 font-bold text-indigo-600 dark:text-indigo-400">
+                      {field.hex}
+                    </td>
+                    <td className="py-1.5 px-2 text-emerald-600 dark:text-emerald-400 font-semibold">
+                      {field.dec !== undefined ? String(field.dec) : '-'}
+                    </td>
+                    <td className="py-1.5 px-2 font-sans text-[11px] text-zinc-500 dark:text-zinc-400">
+                      {field.description}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Interactive Byte Visualizer Grid & Hex Dump */}
+      <div className="space-y-1.5">
+        <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-80">
+          <Terminal size={13} className="text-cyan-400" />
+          바이트 스트림 맵 (Byte Stream Visualizer)
+        </span>
+
+        <div
+          className={`p-2.5 rounded border font-mono text-xs ${
+            isRetro
+              ? 'bg-black text-[#55f2ff] border-[#808080]'
+              : isDark
+              ? 'bg-zinc-950 border-zinc-800'
+              : 'bg-zinc-900 text-zinc-100 border-zinc-300'
+          }`}
+        >
+          <div className="flex flex-wrap items-center gap-1">
+            {packetBytes.map((b, idx) => {
+              const matchingField = analysis?.fields.find(
+                (f) => idx >= f.byteRange[0] && idx <= f.byteRange[1]
+              );
+              const isHighlighted = selectedField
+                ? idx >= selectedField.byteRange[0] && idx <= selectedField.byteRange[1]
+                : false;
+
+              return (
+                <div
+                  key={idx}
+                  onClick={() => matchingField && setSelectedField(matchingField)}
+                  title={`오프셋: [${idx}]\nHEX: 0x${b.toString(16).toUpperCase().padStart(2, '0')}\nDEC: ${b}\nASCII: ${
+                    b >= 32 && b <= 126 ? String.fromCharCode(b) : '.'
+                  }\n필드: ${matchingField?.name || 'Unknown'}`}
+                  className={`group relative flex flex-col items-center justify-center p-0.5 rounded min-w-[28px] cursor-pointer transition-all ${
+                    isHighlighted
+                      ? 'ring-2 ring-indigo-400 bg-indigo-600 text-white scale-110 z-10 shadow-lg'
+                      : matchingField?.tagColor === 'rose'
+                      ? 'bg-rose-950/70 text-rose-300 border border-rose-700/60 hover:scale-105'
+                      : matchingField?.tagColor === 'emerald'
+                      ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 hover:scale-105'
+                      : matchingField?.tagColor === 'amber'
+                      ? 'bg-amber-950/70 text-amber-300 border border-amber-700/60 hover:scale-105'
+                      : matchingField?.tagColor === 'blue'
+                      ? 'bg-sky-950/70 text-sky-300 border border-sky-700/60 hover:scale-105'
+                      : 'bg-zinc-800/80 text-zinc-300 border border-zinc-700/60 hover:scale-105'
+                  }`}
+                >
+                  <span className="text-[8px] opacity-50 font-sans">{idx}</span>
+                  <span className="font-bold text-[11px]">{b.toString(16).toUpperCase().padStart(2, '0')}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ASCII Equivalent Line */}
+          <div className="mt-2 pt-1.5 border-t border-zinc-800 text-[10px] text-zinc-400 flex items-center gap-1.5">
+            <span className="text-zinc-500 select-none">ASCII:</span>
+            <span className="text-emerald-400 font-bold tracking-widest break-all">
+              {packetBytes.map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')).join('')}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
+  isOpen,
+  onClose,
+  theme,
+  packet,
+  allPackets,
+  onApplyToSend
+}) => {
+  const isRetro = theme.name === 'classic-retro';
+  const isDark = theme.name === 'modern-dark';
+
+  // 1. Detect Paired Packet (TX ↔ RX)
+  const pairInfo = useMemo<PacketPairInfo | null>(() => {
+    if (!packet || !allPackets) return null;
+    return findPairedPacket(packet, allPackets);
+  }, [packet, allPackets]);
+
+  // 2. View mode state: 'dual' | 'tx' | 'rx'
+  const [viewMode, setViewMode] = useState<'dual' | 'tx' | 'rx'>('dual');
+
+  // Reset viewMode to 'dual' whenever a new paired packet is opened
+  useEffect(() => {
+    if (pairInfo) {
+      setViewMode('dual');
+    }
+  }, [packet?.id, pairInfo]);
+
+  // Close modal on ESC key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !packet) return null;
+
+  const isDualActive = !!pairInfo && viewMode === 'dual';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+      <div
+        className={`relative w-full ${
+          isDualActive ? 'max-w-[96vw] xl:max-w-7xl' : 'max-w-4xl'
+        } max-h-[94vh] flex flex-col rounded-lg shadow-2xl overflow-hidden border transition-all duration-200 ${
           isRetro
             ? 'bg-[#d4d0c8] text-black border-[#808080]'
             : isDark
@@ -210,7 +842,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
       >
         {/* Modal Header */}
         <div
-          className={`flex items-center justify-between px-4 py-3 border-b select-none shrink-0 ${
+          className={`flex items-center justify-between px-4 py-3 border-b select-none shrink-0 gap-3 flex-wrap ${
             isRetro
               ? 'bg-[#000080] text-white'
               : isDark
@@ -218,553 +850,176 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
               : 'bg-slate-100 border-slate-200'
           }`}
         >
+          {/* Title & Pairing Badges */}
           <div className="flex items-center gap-2 flex-wrap">
             <Search size={18} className={isRetro ? 'text-white' : 'text-indigo-500 dark:text-indigo-400'} />
-            <span className="font-bold text-sm tracking-wide">패킷 프로토콜 상세 분석기 (Packet Inspector)</span>
-
-            {/* Direction Badge */}
-            <span
-              style={{
-                backgroundColor: isRx ? theme.rxColor : theme.txColor,
-                color: theme.textColor || '#000'
-              }}
-              className="px-2 py-0.5 rounded text-xs font-black uppercase shadow-xs ml-2"
-            >
-              {isRx ? 'RX (수신)' : 'TX (송신)'}
+            <span className="font-bold text-sm tracking-wide">
+              {isDualActive
+                ? 'TX ⇄ RX 연계 패킷 통합 분석기 (Dual Inspector)'
+                : '패킷 프로토콜 상세 분석기 (Packet Inspector)'}
             </span>
 
-            {/* Timestamp */}
-            <span
-              className={`font-mono text-xs px-2 py-0.5 rounded ${
-                isRetro
-                  ? 'bg-black/30 text-white'
-                  : isDark
-                  ? 'bg-zinc-800 text-zinc-300 border border-zinc-700'
-                  : 'bg-white text-zinc-700 border border-zinc-300'
-              }`}
-            >
-              {formatTimestamp(packet.timestamp)}
-            </span>
+            {/* Paired Status & RTT Latency Badge */}
+            {pairInfo && (
+              <>
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  <ArrowRightLeft size={12} />
+                  <span>연계 패킷 매핑</span>
+                </span>
 
-            {/* Length Badge */}
-            <span
-              className={`font-mono text-xs px-2 py-0.5 rounded font-bold ${
-                isRetro
-                  ? 'bg-[#15213b] text-[#55f2ff]'
-                  : isDark
-                  ? 'bg-zinc-950 text-amber-400 border border-zinc-700'
-                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-              }`}
-            >
-              {packetBytes.length} Bytes
-            </span>
-
-            {/* Protocol Badge */}
-            {analysis && (
-              <span
-                className={`text-xs px-2 py-0.5 rounded font-bold border ${
-                  analysis.protocol === 'modbus-tcp'
-                    ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
-                    : analysis.protocol === 'modbus-rtu'
-                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
-                    : 'bg-purple-500/20 text-purple-400 border-purple-500/40'
-                }`}
-              >
-                {analysis.protocolLabel}
-              </span>
+                <span
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shadow-2xs"
+                  title={`응답 지연시간 (RTT): ${pairInfo.latencyMs}ms\n매칭 사유: ${pairInfo.matchReason}`}
+                >
+                  <Clock size={12} />
+                  <span>RTT: +{pairInfo.latencyMs}ms</span>
+                </span>
+              </>
             )}
           </div>
 
-          <button
-            onClick={onClose}
-            className={`p-1 rounded hover:bg-black/20 transition-colors ${
-              isRetro ? 'text-white' : 'text-zinc-400 hover:text-zinc-100'
-            }`}
-          >
-            <X size={18} />
-          </button>
+          {/* Center/Right: View Mode Selector (Dual / TX / RX) */}
+          <div className="flex items-center gap-2">
+            {pairInfo && (
+              <div
+                className={`inline-flex rounded p-0.5 border text-xs font-semibold ${
+                  isRetro
+                    ? 'bg-[#ece9d8] border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-950 border-zinc-700'
+                    : 'bg-white border-zinc-300 shadow-2xs'
+                }`}
+              >
+                <button
+                  onClick={() => setViewMode('dual')}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all cursor-pointer ${
+                    viewMode === 'dual'
+                      ? isRetro
+                        ? 'bg-[#000080] text-white font-bold'
+                        : 'bg-indigo-600 text-white font-bold shadow-xs'
+                      : isDark
+                      ? 'text-zinc-400 hover:text-zinc-200'
+                      : 'text-zinc-600 hover:text-black'
+                  }`}
+                  title="TX 요청과 RX 응답을 좌우로 나란히 비교"
+                >
+                  <ArrowRightLeft size={12} />
+                  <span>TX+RX 듀얼 비교</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('tx')}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all cursor-pointer ${
+                    viewMode === 'tx'
+                      ? isRetro
+                        ? 'bg-[#000080] text-white font-bold'
+                        : 'bg-indigo-600 text-white font-bold shadow-xs'
+                      : isDark
+                      ? 'text-zinc-400 hover:text-zinc-200'
+                      : 'text-zinc-600 hover:text-black'
+                  }`}
+                >
+                  <Send size={11} />
+                  <span>TX만</span>
+                </button>
+                <button
+                  onClick={() => setViewMode('rx')}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all cursor-pointer ${
+                    viewMode === 'rx'
+                      ? isRetro
+                        ? 'bg-[#000080] text-white font-bold'
+                        : 'bg-indigo-600 text-white font-bold shadow-xs'
+                      : isDark
+                      ? 'text-zinc-400 hover:text-zinc-200'
+                      : 'text-zinc-600 hover:text-black'
+                  }`}
+                >
+                  <Download size={11} />
+                  <span>RX만</span>
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={onClose}
+              className={`p-1.5 rounded hover:bg-black/20 transition-colors cursor-pointer ${
+                isRetro ? 'text-white' : 'text-zinc-400 hover:text-zinc-100'
+              }`}
+              title="닫기 (ESC)"
+            >
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Summary Banner */}
-          {analysis && (
-            <div
-              className={`p-3 rounded-md border flex items-start gap-3 shadow-xs ${
-                analysis.isValidCrc === false
-                  ? isDark
-                    ? 'bg-rose-950/30 border-rose-800/60 text-rose-200'
-                    : 'bg-rose-50 border-rose-200 text-rose-800'
-                  : analysis.protocol === 'modbus-tcp'
-                  ? isDark
-                    ? 'bg-sky-950/30 border-sky-800/60 text-sky-200'
-                    : 'bg-sky-50 border-sky-200 text-sky-900'
-                  : analysis.protocol === 'modbus-rtu'
-                  ? isDark
-                    ? 'bg-emerald-950/30 border-emerald-800/60 text-emerald-200'
-                    : 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                  : isDark
-                  ? 'bg-zinc-900/80 border-zinc-700/80 text-zinc-200'
-                  : 'bg-slate-50 border-slate-200 text-slate-900'
-              }`}
-            >
-              <div className="mt-0.5 shrink-0">
-                {analysis.isValidCrc === false ? (
-                  <ShieldAlert size={20} className="text-rose-400" />
-                ) : analysis.isModbus ? (
-                  <ShieldCheck size={20} className="text-emerald-400" />
-                ) : (
-                  <Activity size={20} className="text-indigo-400" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-bold text-sm flex items-center gap-2 flex-wrap">
-                  <span>{analysis.summary}</span>
-                  {analysis.isValidCrc === true && (
-                    <span className="text-[11px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-normal border border-emerald-500/30">
-                      CRC-16 Modbus 정상
-                    </span>
-                  )}
-                  {analysis.isValidCrc === false && (
-                    <span className="text-[11px] px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 font-bold border border-rose-500/30">
-                      CRC-16 불일치 (손상 가능성)
-                    </span>
-                  )}
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+          {pairInfo ? (
+            viewMode === 'dual' ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 divide-y lg:divide-y-0 lg:divide-x divide-zinc-200 dark:divide-zinc-800">
+                {/* Left: TX Request Pane */}
+                <div className="lg:pr-2">
+                  <PacketInspectPane
+                    packet={pairInfo.txPacket}
+                    theme={theme}
+                    isRetro={isRetro}
+                    isDark={isDark}
+                    isDual={true}
+                    role="tx"
+                    onApplyToSend={onApplyToSend}
+                  />
                 </div>
-                <div className="text-xs opacity-80 mt-1">
-                  {analysis.protocol === 'modbus-tcp' &&
-                    'MBAP 헤더(7B: TID/ProtoID/Length/UnitID)와 Modbus PDU 페이로드가 완벽히 분석되었습니다.'}
-                  {analysis.protocol === 'modbus-rtu' &&
-                    '슬레이브 국번(1B), 기능 코드(1B), 데이터 필드 및 16비트 CRC 체크섬(LSB First) 구조입니다.'}
-                  {analysis.protocol === 'custom-frame' &&
-                    '표준 Modbus 시그니처가 없거나 STX/ETX 형태의 일반 시리얼/TCP 데이터 프레임입니다.'}
+
+                {/* Right: RX Response Pane */}
+                <div className="lg:pl-4 pt-4 lg:pt-0">
+                  <PacketInspectPane
+                    packet={pairInfo.rxPacket}
+                    theme={theme}
+                    isRetro={isRetro}
+                    isDark={isDark}
+                    isDual={true}
+                    role="rx"
+                    onApplyToSend={onApplyToSend}
+                  />
                 </div>
               </div>
-            </div>
+            ) : viewMode === 'tx' ? (
+              <PacketInspectPane
+                packet={pairInfo.txPacket}
+                theme={theme}
+                isRetro={isRetro}
+                isDark={isDark}
+                isDual={false}
+                role="tx"
+                onApplyToSend={onApplyToSend}
+              />
+            ) : (
+              <PacketInspectPane
+                packet={pairInfo.rxPacket}
+                theme={theme}
+                isRetro={isRetro}
+                isDark={isDark}
+                isDual={false}
+                role="rx"
+                onApplyToSend={onApplyToSend}
+              />
+            )
+          ) : (
+            /* Standalone Single Packet */
+            <PacketInspectPane
+              packet={packet}
+              theme={theme}
+              isRetro={isRetro}
+              isDark={isDark}
+              isDual={false}
+              role="standalone"
+              onApplyToSend={onApplyToSend}
+            />
           )}
-
-          {/* ------------------------------------------------------------- */}
-          {/* REGISTER PAYLOAD DECODER SECTION (2B / 4B / 8B / Float / Int) */}
-          {/* ------------------------------------------------------------- */}
-          {analysis?.registerPayload && analysis.registerPayload.length >= 2 && (
-            <div
-              className={`p-3.5 rounded-lg border space-y-3 ${
-                isRetro
-                  ? 'bg-[#ece9d8] border-[#808080] shadow-sm'
-                  : isDark
-                  ? 'bg-zinc-900/90 border-indigo-500/30 shadow-md'
-                  : 'bg-indigo-50/40 border-indigo-200 shadow-xs'
-              }`}
-            >
-              {/* Section Header & Heuristic Auto-Detect Banner */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Database size={16} className="text-indigo-500 dark:text-indigo-400" />
-                  <span className="font-bold text-xs uppercase tracking-wider">
-                    레지스터 페이로드 단위별 값 분석 (Register Data Decoder)
-                  </span>
-                  <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-500 dark:text-indigo-300 font-bold border border-indigo-500/20">
-                    총 {analysis.registerPayload.length}B ({Math.floor(analysis.registerPayload.length / 2)}개 레지스터)
-                  </span>
-                </div>
-
-                {typeGuess && (
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30 shadow-2xs">
-                      <Sparkles size={12} className="shrink-0" />
-                      <span>추천: {typeGuess.label}</span>
-                    </span>
-                    {(unitSize !== typeGuess.unitSize || dataType !== typeGuess.dataType || byteOrder !== typeGuess.byteOrder) && (
-                      <button
-                        onClick={() => {
-                          setUnitSize(typeGuess.unitSize);
-                          setDataType(typeGuess.dataType);
-                          setByteOrder(typeGuess.byteOrder);
-                        }}
-                        className="text-[11px] px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-500 font-bold transition-all shadow-2xs cursor-pointer"
-                      >
-                        추천 적용
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Controls Bar: Unit Size, Data Type, Byte Order */}
-              <div
-                className={`p-2.5 rounded border flex flex-wrap items-center justify-between gap-3 text-xs ${
-                  isRetro
-                    ? 'bg-white border-[#808080]'
-                    : isDark
-                    ? 'bg-zinc-950/80 border-zinc-800'
-                    : 'bg-white border-zinc-200'
-                }`}
-              >
-                {/* 1. Unit Size Selector (2B / 4B / 8B) */}
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-zinc-500 dark:text-zinc-400 select-none">단위 크기:</span>
-                  <div className="inline-flex rounded-md p-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
-                    <button
-                      onClick={() => handleUnitSizeChange(2)}
-                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                        unitSize === 2
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white'
-                      }`}
-                    >
-                      2B (16-bit)
-                    </button>
-                    <button
-                      onClick={() => handleUnitSizeChange(4)}
-                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                        unitSize === 4
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white'
-                      }`}
-                    >
-                      4B (32-bit)
-                    </button>
-                    <button
-                      onClick={() => handleUnitSizeChange(8)}
-                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
-                        unitSize === 8
-                          ? 'bg-indigo-600 text-white shadow-xs'
-                          : 'text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white'
-                      }`}
-                    >
-                      8B (64-bit)
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. Data Type Selector */}
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-zinc-500 dark:text-zinc-400 select-none">표시 형식:</span>
-                  <select
-                    value={dataType}
-                    onChange={(e) => setDataType(e.target.value)}
-                    className={`h-7 px-2 font-mono text-xs rounded border outline-none font-bold cursor-pointer ${
-                      isRetro
-                        ? 'bg-white text-black border-[#808080]'
-                        : isDark
-                        ? 'bg-zinc-800 text-zinc-100 border-zinc-700'
-                        : 'bg-zinc-50 text-zinc-900 border-zinc-300'
-                    }`}
-                  >
-                    {unitSize === 2 && (
-                      <>
-                        <option value="uint16">UInt16 (부호없는 정수, 0~65535)</option>
-                        <option value="int16">Int16 (부호있는 정수, -32768~32767)</option>
-                        <option value="hex">HEX (16진수, 0x0000)</option>
-                        <option value="binary">Binary (2진수 비트)</option>
-                      </>
-                    )}
-                    {unitSize === 4 && (
-                      <>
-                        <option value="float32">Float32 (IEEE 754 32비트 실수)</option>
-                        <option value="uint32">UInt32 (32비트 정수)</option>
-                        <option value="int32">Int32 (32비트 부호 정수)</option>
-                        <option value="hex">HEX (32비트 16진수)</option>
-                      </>
-                    )}
-                    {unitSize === 8 && (
-                      <>
-                        <option value="float64">Double (IEEE 754 64비트 실수)</option>
-                        <option value="uint64">UInt64 (64비트 정수)</option>
-                        <option value="int64">Int64 (64비트 부호 정수)</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* 3. Byte Order / Endianness Selector */}
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-zinc-500 dark:text-zinc-400 select-none">순서 (Endian):</span>
-                  <select
-                    value={byteOrder}
-                    onChange={(e) => setByteOrder(e.target.value)}
-                    className={`h-7 px-2 font-mono text-xs rounded border outline-none font-bold cursor-pointer ${
-                      isRetro
-                        ? 'bg-white text-black border-[#808080]'
-                        : isDark
-                        ? 'bg-zinc-800 text-zinc-100 border-zinc-700'
-                        : 'bg-zinc-50 text-zinc-900 border-zinc-300'
-                    }`}
-                  >
-                    {unitSize === 2 && (
-                      <>
-                        <option value="AB">AB (Big-Endian 표준)</option>
-                        <option value="BA">BA (Little-Endian / Byte Swap)</option>
-                      </>
-                    )}
-                    {unitSize === 4 && (
-                      <>
-                        <option value="ABCD">ABCD (Big-Endian 표준)</option>
-                        <option value="CDAB">CDAB (Word-Swap / Modicon)</option>
-                        <option value="BADC">BADC (Byte-Swap)</option>
-                        <option value="DCBA">DCBA (Little-Endian)</option>
-                      </>
-                    )}
-                    {unitSize === 8 && (
-                      <>
-                        <option value="ABCDEFGH">ABCDEFGH (Big-Endian 표준)</option>
-                        <option value="GHEFCDAB">GHEFCDAB (Word-Swap)</option>
-                        <option value="HGFEDCBA">HGFEDCBA (Little-Endian)</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* Batch Copy Registers Button */}
-                <button
-                  onClick={handleCopyAllRegisters}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all shadow-2xs cursor-pointer ${
-                    copiedRegs
-                      ? 'bg-emerald-600 text-white'
-                      : isRetro
-                      ? 'bg-[#d4d0c8] border border-[#808080] text-black hover:bg-white'
-                      : isDark
-                      ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700'
-                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-300'
-                  }`}
-                  title="전체 디코딩 레지스터 표를 TSV 텍스트로 복사"
-                >
-                  {copiedRegs ? <Check size={13} /> : <Copy size={13} />}
-                  <span>{copiedRegs ? '전체 복사됨!' : '디코딩 표 복사'}</span>
-                </button>
-              </div>
-
-              {/* Decoded Registers Grid / Table */}
-              <div
-                className={`max-h-60 overflow-y-auto rounded border font-mono text-xs ${
-                  isRetro
-                    ? 'bg-white border-[#808080]'
-                    : isDark
-                    ? 'bg-zinc-950 border-zinc-800'
-                    : 'bg-white border-zinc-200'
-                }`}
-              >
-                <table className="w-full text-left border-collapse">
-                  <thead className="sticky top-0 z-10 select-none">
-                    <tr
-                      className={`border-b text-[11px] font-bold ${
-                        isRetro
-                          ? 'bg-[#ece9d8] text-black border-[#808080]'
-                          : isDark
-                          ? 'bg-zinc-900 text-zinc-400 border-zinc-800'
-                          : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                      }`}
-                    >
-                      <th className="py-1.5 px-3 w-12 text-center">No</th>
-                      <th className="py-1.5 px-3 w-36">레지스터 번호</th>
-                      <th className="py-1.5 px-3 w-28">바이트 오프셋</th>
-                      <th className="py-1.5 px-3 w-36">HEX</th>
-                      <th className="py-1.5 px-3">변환 값 ({dataType.toUpperCase()})</th>
-                      <th className="py-1.5 px-3 w-16 text-center">복사</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
-                    {decodedRegisters.map((row) => (
-                      <tr
-                        key={row.index}
-                        className={`transition-colors ${
-                          isDark ? 'hover:bg-zinc-900/60 text-zinc-300' : 'hover:bg-zinc-50 text-zinc-700'
-                        }`}
-                      >
-                        <td className="py-1.5 px-3 text-center text-zinc-400">{row.index + 1}</td>
-                        <td className="py-1.5 px-3 font-bold text-indigo-500 dark:text-indigo-400">
-                          {row.registerRangeLabel}
-                        </td>
-                        <td className="py-1.5 px-3 text-amber-500 dark:text-amber-400">{row.byteOffsetLabel}</td>
-                        <td className="py-1.5 px-3 font-semibold text-zinc-500 dark:text-zinc-400">{row.hex}</td>
-                        <td className="py-1.5 px-3 font-bold text-emerald-600 dark:text-emerald-400 text-[13px]">
-                          {row.formattedValue}
-                        </td>
-                        <td className="py-1.5 px-3 text-center">
-                          <button
-                            onClick={() => handleCopySingleRegister(row.formattedValue, row.index)}
-                            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
-                            title="값 복사"
-                          >
-                            {copiedRegIndex === row.index ? (
-                              <Check size={12} className="text-emerald-500" />
-                            ) : (
-                              <Copy size={12} className="text-zinc-400 hover:text-zinc-200" />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* Decoded Fields Table */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-80">
-                <Layers size={14} className="text-indigo-400" />
-                프레임 필드 구조 분석 (Field Breakdown)
-              </span>
-              <span className="text-[11px] opacity-60">총 {analysis?.fields.length || 0}개 필드 식별됨</span>
-            </div>
-
-            <div
-              className={`rounded border overflow-hidden ${
-                isRetro
-                  ? 'bg-white border-[#808080]'
-                  : isDark
-                  ? 'bg-zinc-900/80 border-zinc-800'
-                  : 'bg-white border-zinc-200 shadow-xs'
-              }`}
-            >
-              <table className="w-full text-left text-xs border-collapse font-mono">
-                <thead>
-                  <tr
-                    className={`border-b select-none text-[11px] font-bold ${
-                      isRetro
-                        ? 'bg-[#ece9d8] text-black border-[#808080]'
-                        : isDark
-                        ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700'
-                        : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                    }`}
-                  >
-                    <th className="py-1.5 px-3 w-12 text-center">No</th>
-                    <th className="py-1.5 px-3 w-24 text-center">오프셋</th>
-                    <th className="py-1.5 px-3 w-44">필드명</th>
-                    <th className="py-1.5 px-3 w-36">HEX</th>
-                    <th className="py-1.5 px-3 w-32">파싱 값 (DEC/의미)</th>
-                    <th className="py-1.5 px-3">설명 및 표준 규격</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  {analysis?.fields.map((field, idx) => {
-                    const isSelected = selectedField?.name === field.name;
-                    const rangeStr =
-                      field.byteRange[0] === field.byteRange[1]
-                        ? `[${field.byteRange[0]}]`
-                        : `[${field.byteRange[0]}..${field.byteRange[1]}]`;
-
-                    return (
-                      <tr
-                        key={idx}
-                        onClick={() => setSelectedField(field)}
-                        className={`transition-colors cursor-pointer ${
-                          isSelected
-                            ? isDark
-                              ? 'bg-indigo-950/40 text-indigo-200'
-                              : 'bg-indigo-50 text-indigo-900'
-                            : isDark
-                            ? 'hover:bg-zinc-800/50 text-zinc-300'
-                            : 'hover:bg-zinc-50 text-zinc-700'
-                        }`}
-                      >
-                        <td className="py-2 px-3 text-center text-zinc-400">{idx + 1}</td>
-                        <td className="py-2 px-3 text-center font-bold text-amber-500 dark:text-amber-400">
-                          {rangeStr}
-                        </td>
-                        <td className="py-2 px-3 font-semibold font-sans flex items-center gap-1.5">
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              field.tagColor === 'rose'
-                                ? 'bg-rose-500'
-                                : field.tagColor === 'emerald'
-                                ? 'bg-emerald-500'
-                                : field.tagColor === 'amber'
-                                ? 'bg-amber-500'
-                                : field.tagColor === 'blue'
-                                ? 'bg-blue-500'
-                                : 'bg-zinc-500'
-                            }`}
-                          />
-                          <span>{field.name}</span>
-                        </td>
-                        <td className="py-2 px-3 font-bold text-indigo-600 dark:text-indigo-400">
-                          {field.hex}
-                        </td>
-                        <td className="py-2 px-3 text-emerald-600 dark:text-emerald-400 font-semibold">
-                          {field.dec !== undefined ? String(field.dec) : '-'}
-                        </td>
-                        <td className="py-2 px-3 font-sans text-xs text-zinc-500 dark:text-zinc-400">
-                          {field.description}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Interactive Byte Visualizer Grid & Hex Dump */}
-          <div className="space-y-2">
-            <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-80">
-              <Terminal size={14} className="text-cyan-400" />
-              바이트 스트림 맵 (Byte Stream Visualizer)
-            </span>
-
-            <div
-              className={`p-3 rounded border font-mono text-xs ${
-                isRetro
-                  ? 'bg-black text-[#55f2ff] border-[#808080]'
-                  : isDark
-                  ? 'bg-zinc-950 border-zinc-800'
-                  : 'bg-zinc-900 text-zinc-100 border-zinc-300'
-              }`}
-            >
-              <div className="flex flex-wrap items-center gap-1.5">
-                {packetBytes.map((b, idx) => {
-                  const matchingField = analysis?.fields.find(
-                    (f) => idx >= f.byteRange[0] && idx <= f.byteRange[1]
-                  );
-                  const isHighlighted = selectedField
-                    ? idx >= selectedField.byteRange[0] && idx <= selectedField.byteRange[1]
-                    : false;
-
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => matchingField && setSelectedField(matchingField)}
-                      title={`오프셋: [${idx}]\nHEX: 0x${b.toString(16).toUpperCase().padStart(2, '0')}\nDEC: ${b}\nASCII: ${
-                        b >= 32 && b <= 126 ? String.fromCharCode(b) : '.'
-                      }\n필드: ${matchingField?.name || 'Unknown'}`}
-                      className={`group relative flex flex-col items-center justify-center p-1 rounded min-w-[32px] cursor-pointer transition-all ${
-                        isHighlighted
-                          ? 'ring-2 ring-indigo-400 bg-indigo-600 text-white scale-110 z-10 shadow-lg'
-                          : matchingField?.tagColor === 'rose'
-                          ? 'bg-rose-950/70 text-rose-300 border border-rose-700/60 hover:scale-105'
-                          : matchingField?.tagColor === 'emerald'
-                          ? 'bg-emerald-950/70 text-emerald-300 border border-emerald-700/60 hover:scale-105'
-                          : matchingField?.tagColor === 'amber'
-                          ? 'bg-amber-950/70 text-amber-300 border border-amber-700/60 hover:scale-105'
-                          : matchingField?.tagColor === 'blue'
-                          ? 'bg-sky-950/70 text-sky-300 border border-sky-700/60 hover:scale-105'
-                          : 'bg-zinc-800/80 text-zinc-300 border border-zinc-700/60 hover:scale-105'
-                      }`}
-                    >
-                      <span className="text-[9px] opacity-50 font-sans">{idx}</span>
-                      <span className="font-bold text-[12px]">{b.toString(16).toUpperCase().padStart(2, '0')}</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* ASCII Equivalent Line */}
-              <div className="mt-3 pt-2 border-t border-zinc-800 text-[11px] text-zinc-400 flex items-center gap-2">
-                <span className="text-zinc-500 select-none">ASCII:</span>
-                <span className="text-emerald-400 font-bold tracking-widest break-all">
-                  {packetBytes.map((b) => (b >= 32 && b <= 126 ? String.fromCharCode(b) : '.')).join('')}
-                </span>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Modal Footer */}
         <div
-          className={`flex items-center justify-between px-4 py-3 border-t select-none flex-wrap gap-2 shrink-0 ${
+          className={`flex items-center justify-between px-4 py-2.5 border-t select-none shrink-0 ${
             isRetro
               ? 'bg-[#ece9d8] border-[#808080]'
               : isDark
@@ -772,75 +1027,30 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
               : 'bg-zinc-50 border-zinc-200'
           }`}
         >
-          <div className="flex items-center gap-2">
-            {/* Copy HEX */}
-            <button
-              onClick={handleCopyHex}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all shadow-xs ${
-                copiedHex
-                  ? 'bg-emerald-600 text-white'
-                  : isRetro
-                  ? 'bg-[#d4d0c8] border border-[#808080] hover:bg-white text-black'
-                  : isDark
-                  ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700'
-                  : 'bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300'
-              }`}
-            >
-              {copiedHex ? <Check size={14} /> : <Copy size={14} />}
-              <span>{copiedHex ? '전체 HEX 복사됨!' : '전체 HEX 복사'}</span>
-            </button>
-
-            {/* Copy Report */}
-            <button
-              onClick={handleCopyReport}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all shadow-xs ${
-                copiedReport
-                  ? 'bg-emerald-600 text-white'
-                  : isRetro
-                  ? 'bg-[#d4d0c8] border border-[#808080] hover:bg-white text-black'
-                  : isDark
-                  ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700'
-                  : 'bg-white hover:bg-zinc-100 text-zinc-800 border border-zinc-300'
-              }`}
-            >
-              {copiedReport ? <Check size={14} /> : <FileText size={14} />}
-              <span>{copiedReport ? '리포트 복사됨!' : '분석 리포트 복사'}</span>
-            </button>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {onApplyToSend && (
-              <button
-                onClick={() => {
-                  onApplyToSend(rawHexStr, 'hex');
-                  onClose();
-                }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-bold transition-all shadow-xs ${
-                  isRetro
-                    ? 'bg-[#000080] text-white hover:bg-[#0000a0]'
-                    : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                }`}
-              >
-                <ArrowUpRight size={14} />
-                <span>전송창에 패킷 넣기</span>
-              </button>
+          <div className="text-xs opacity-70 flex items-center gap-2">
+            {pairInfo && (
+              <span className="hidden sm:inline">
+                매칭 정보: {pairInfo.matchReason} (RTT: +{pairInfo.latencyMs}ms)
+              </span>
             )}
-
-            <button
-              onClick={onClose}
-              className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${
-                isRetro
-                  ? 'bg-[#d4d0c8] border border-[#808080] hover:bg-white text-black'
-                  : isDark
-                  ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
-                  : 'bg-zinc-200 hover:bg-zinc-300 text-zinc-800'
-              }`}
-            >
-              닫기
-            </button>
           </div>
+
+          <button
+            onClick={onClose}
+            className={`px-4 py-1.5 rounded text-xs font-bold transition-all cursor-pointer ${
+              isRetro
+                ? 'bg-[#d4d0c8] border border-[#808080] hover:bg-white text-black'
+                : isDark
+                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700'
+                : 'bg-zinc-200 hover:bg-zinc-300 text-zinc-800'
+            }`}
+          >
+            닫기 (ESC)
+          </button>
         </div>
       </div>
     </div>
   );
 };
+
+export default PacketInspectorModal;
