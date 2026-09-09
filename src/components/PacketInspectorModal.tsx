@@ -281,7 +281,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
 
         {/* Line 2: Action Buttons */}
         <div
-          className={`flex items-center justify-end gap-1.5 pt-1.5 border-t ${
+          className={`flex items-center justify-start gap-1.5 pt-1.5 border-t ${
             isRetro
               ? 'border-[#808080]/30'
               : isDark
