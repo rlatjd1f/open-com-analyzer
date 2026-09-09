@@ -420,10 +420,9 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
               >
                 <th className="py-1 px-2 w-8 text-center">No</th>
                 <th className="py-1 px-2 w-16 text-center">오프셋</th>
-                <th className="py-1 px-2 w-36">필드명</th>
-                <th className="py-1 px-2 w-28">HEX</th>
-                <th className="py-1 px-2 w-24">파싱 값</th>
-                <th className="py-1 px-2">설명</th>
+                <th className="py-1 px-2">필드명</th>
+                <th className="py-1 px-2 w-36">HEX</th>
+                <th className="py-1 px-2 w-28">파싱 값</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -438,6 +437,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                   <tr
                     key={idx}
                     onClick={() => setSelectedField(field)}
+                    title={field.description}
                     className={`transition-colors cursor-pointer ${
                       isSelected
                         ? isDark
@@ -468,14 +468,11 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
                       />
                       <span className="truncate">{field.name}</span>
                     </td>
-                    <td className="py-1.5 px-2 font-bold text-indigo-600 dark:text-indigo-400">
+                    <td className="py-1.5 px-2 font-bold text-indigo-600 dark:text-indigo-400 break-all">
                       {field.hex}
                     </td>
                     <td className="py-1.5 px-2 text-emerald-600 dark:text-emerald-400 font-semibold">
                       {field.dec !== undefined ? String(field.dec) : '-'}
-                    </td>
-                    <td className="py-1.5 px-2 font-sans text-[11px] text-zinc-500 dark:text-zinc-400">
-                      {field.description}
                     </td>
                   </tr>
                 );
