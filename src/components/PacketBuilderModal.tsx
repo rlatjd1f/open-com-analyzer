@@ -209,7 +209,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [registerSize, setRegisterSize] = useState<2 | 4>(2); // 2 bytes (16-bit) or 4 bytes (32-bit)
   const [fourByteEndian, setFourByteEndian] = useState<'ABCD' | 'CDAB' | 'DCBA' | 'BADC'>('ABCD');
   const [sampleRegisterCount, setSampleRegisterCount] = useState<number>(10);
-  const [samplePattern, setSamplePattern] = useState<'incremental' | 'zeros' | 'random' | 'fixed' | 'float'>('incremental');
+  const [samplePattern, setSamplePattern] = useState<'incremental' | 'zeros' | 'random' | 'fixed' | 'float' | 'int32' | 'mixed'>('incremental');
   const [sampleFixedValue, setSampleFixedValue] = useState<string>('0001');
 
   // Modbus Exception specific state
@@ -577,6 +577,22 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
           const view = new DataView(buf);
           view.setFloat32(0, floatVal, false);
           rawBytes = [view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)];
+        } else if (samplePattern === 'int32') {
+          // 32-bit Integer (1000, 2000, 3000, ...)
+          const intVal = (i * 1000) >>> 0;
+          rawBytes = [(intVal >>> 24) & 0xFF, (intVal >>> 16) & 0xFF, (intVal >>> 8) & 0xFF, intVal & 0xFF];
+        } else if (samplePattern === 'mixed') {
+          // 32-bit Integer / Float Mixed (홀수: 32bit 정수 100, 200..., 짝수: Float 220.5, 441.0...)
+          if (i % 2 === 1) {
+            const intVal = (i * 100) >>> 0;
+            rawBytes = [(intVal >>> 24) & 0xFF, (intVal >>> 16) & 0xFF, (intVal >>> 8) & 0xFF, intVal & 0xFF];
+          } else {
+            const floatVal = i * 110.25; // 220.5, 441.0 ...
+            const buf = new ArrayBuffer(4);
+            const view = new DataView(buf);
+            view.setFloat32(0, floatVal, false);
+            rawBytes = [view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)];
+          }
         } else {
           // incremental (00000001, 00000002, ...)
           const val = i >>> 0;
@@ -599,25 +615,120 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
       }
       setRespDataHex(chunks.join(' ').toUpperCase());
     } else {
-      // 2-byte Mode (16-bit INT / UINT)
+      // 2-byte Mode (16-bit INT / UINT / Mixed)
       const chunks: string[] = [];
       const cleanFixed = sampleFixedValue.replace(/[^0-9a-fA-F]/g, '').padStart(4, '0').slice(-4);
-      for (let i = 1; i <= Math.max(1, qty); i++) {
-        if (samplePattern === 'zeros') {
-          chunks.push('00 00');
-        } else if (samplePattern === 'random') {
-          const r = Math.floor(Math.random() * 65536);
-          const hi = ((r >> 8) & 0xFF).toString(16).padStart(2, '0');
-          const lo = (r & 0xFF).toString(16).padStart(2, '0');
-          chunks.push(`${hi} ${lo}`);
-        } else if (samplePattern === 'fixed') {
-          chunks.push(`${cleanFixed.slice(0, 2)} ${cleanFixed.slice(2, 4)}`);
-        } else {
-          // incremental (0001, 0002, ...)
-          const val = i & 0xFFFF;
-          const hi = ((val >> 8) & 0xFF).toString(16).padStart(2, '0');
-          const lo = (val & 0xFF).toString(16).padStart(2, '0');
-          chunks.push(`${hi} ${lo}`);
+      
+      if (samplePattern === 'mixed') {
+        // 2-byte 모드에서의 혼합: 앞쪽 2개 레지스터는 16bit 정수(상태코드 1, 2), 그 뒤는 4바이트 Float (220.5V, 380.0V ...)
+        let regIdx = 1;
+        while (regIdx <= Math.max(1, qty)) {
+          if (regIdx <= 2 || regIdx + 1 > Math.max(1, qty)) {
+            // 2-byte UInt16 상태/카운터 레지스터 (0x0001, 0x0002 ...)
+            const val = regIdx & 0xFFFF;
+            const hi = ((val >> 8) & 0xFF).toString(16).padStart(2, '0');
+            const lo = (val & 0xFF).toString(16).padStart(2, '0');
+            chunks.push(`${hi} ${lo}`);
+            regIdx += 1;
+          } else {
+            // 4-byte Float32 실수 레지스터 쌍 (2개 레지스터 묶음)
+            const floatVal = regIdx * 55.125; // 165.375, 220.5 ...
+            const buf = new ArrayBuffer(4);
+            const view = new DataView(buf);
+            view.setFloat32(0, floatVal, false);
+            let ordered: [number, number, number, number];
+            const [a, b, c, d] = [view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)];
+            switch (fourByteEndian) {
+              case 'CDAB': ordered = [c, d, a, b]; break;
+              case 'DCBA': ordered = [d, c, b, a]; break;
+              case 'BADC': ordered = [b, a, d, c]; break;
+              case 'ABCD':
+              default:     ordered = [a, b, c, d]; break;
+            }
+            const p = ordered.map(x => x.toString(16).toUpperCase().padStart(2, '0'));
+            chunks.push(`${p[0]} ${p[1]}`);
+            chunks.push(`${p[2]} ${p[3]}`);
+            regIdx += 2;
+          }
+        }
+      } else if (samplePattern === 'float') {
+        // 2-byte 모드에서 Float32 선택 시 2개 레지스터씩 묶어서 실수 쌍 생성
+        let regIdx = 1;
+        let floatCounter = 1;
+        while (regIdx <= Math.max(1, qty)) {
+          if (regIdx + 1 <= Math.max(1, qty)) {
+            const floatVal = floatCounter * 1.5;
+            floatCounter++;
+            const buf = new ArrayBuffer(4);
+            const view = new DataView(buf);
+            view.setFloat32(0, floatVal, false);
+            let ordered: [number, number, number, number];
+            const [a, b, c, d] = [view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)];
+            switch (fourByteEndian) {
+              case 'CDAB': ordered = [c, d, a, b]; break;
+              case 'DCBA': ordered = [d, c, b, a]; break;
+              case 'BADC': ordered = [b, a, d, c]; break;
+              case 'ABCD':
+              default:     ordered = [a, b, c, d]; break;
+            }
+            const p = ordered.map(x => x.toString(16).toUpperCase().padStart(2, '0'));
+            chunks.push(`${p[0]} ${p[1]}`);
+            chunks.push(`${p[2]} ${p[3]}`);
+            regIdx += 2;
+          } else {
+            chunks.push('00 00');
+            regIdx += 1;
+          }
+        }
+      } else if (samplePattern === 'int32') {
+        // 2-byte 모드에서 32bit 정수 선택 시 2개 레지스터씩 묶어서 32bit 정수 패턴 생성
+        let regIdx = 1;
+        let intCounter = 1;
+        while (regIdx <= Math.max(1, qty)) {
+          if (regIdx + 1 <= Math.max(1, qty)) {
+            const intVal = (intCounter * 1000) >>> 0;
+            intCounter++;
+            const rawBytes: [number, number, number, number] = [
+              (intVal >>> 24) & 0xFF,
+              (intVal >>> 16) & 0xFF,
+              (intVal >>> 8) & 0xFF,
+              intVal & 0xFF,
+            ];
+            let ordered: [number, number, number, number];
+            switch (fourByteEndian) {
+              case 'CDAB': ordered = [rawBytes[2], rawBytes[3], rawBytes[0], rawBytes[1]]; break;
+              case 'DCBA': ordered = [rawBytes[3], rawBytes[2], rawBytes[1], rawBytes[0]]; break;
+              case 'BADC': ordered = [rawBytes[1], rawBytes[0], rawBytes[3], rawBytes[2]]; break;
+              case 'ABCD':
+              default:     ordered = [rawBytes[0], rawBytes[1], rawBytes[2], rawBytes[3]]; break;
+            }
+            const p = ordered.map(x => x.toString(16).toUpperCase().padStart(2, '0'));
+            chunks.push(`${p[0]} ${p[1]}`);
+            chunks.push(`${p[2]} ${p[3]}`);
+            regIdx += 2;
+          } else {
+            chunks.push('00 00');
+            regIdx += 1;
+          }
+        }
+      } else {
+        for (let i = 1; i <= Math.max(1, qty); i++) {
+          if (samplePattern === 'zeros') {
+            chunks.push('00 00');
+          } else if (samplePattern === 'random') {
+            const r = Math.floor(Math.random() * 65536);
+            const hi = ((r >> 8) & 0xFF).toString(16).padStart(2, '0');
+            const lo = (r & 0xFF).toString(16).padStart(2, '0');
+            chunks.push(`${hi} ${lo}`);
+          } else if (samplePattern === 'fixed') {
+            chunks.push(`${cleanFixed.slice(0, 2)} ${cleanFixed.slice(2, 4)}`);
+          } else {
+            // incremental (0001, 0002, ...)
+            const val = i & 0xFFFF;
+            const hi = ((val >> 8) & 0xFF).toString(16).padStart(2, '0');
+            const lo = (val & 0xFF).toString(16).padStart(2, '0');
+            chunks.push(`${hi} ${lo}`);
+          }
         }
       }
       setRespDataHex(chunks.join(' ').toUpperCase());
@@ -1196,7 +1307,6 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                               type="button"
                               onClick={() => {
                                 setRegisterSize(2);
-                                if (samplePattern === 'float') setSamplePattern('incremental');
                               }}
                               className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
                                 registerSize === 2
@@ -1277,10 +1387,10 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                           </div>
                         </div>
 
-                        {/* Row 2: Order (for 4-byte mode) & Pattern settings */}
+                        {/* Row 2: Order (for 4-byte mode / 32-bit pattern) & Pattern settings */}
                         <div className="flex flex-wrap items-center gap-3 pt-1.5 border-t border-zinc-700/30 dark:border-zinc-800">
-                          {/* 4-Byte Mode Endianness Selector */}
-                          {registerSize === 4 && (functionCode === 3 || functionCode === 4) && (
+                          {/* 4-Byte Mode / 32-bit Pattern Endianness Selector */}
+                          {(registerSize === 4 || samplePattern === 'float' || samplePattern === 'int32' || samplePattern === 'mixed') && (functionCode === 3 || functionCode === 4) && (
                             <div className="flex items-center gap-1.5">
                               <span className="opacity-70 text-[11px] font-semibold">순서:</span>
                               <select
@@ -1309,8 +1419,18 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                               <option value="zeros">모두 0 ({registerSize === 4 ? '00000000...' : '0000 0000...'})</option>
                               <option value="random">랜덤 바이트열</option>
                               <option value="fixed">고정 값 반복</option>
-                              {registerSize === 4 && (
-                                <option value="float">32-bit Float 실수 (1.5, 3.0, 4.5...)</option>
+                              {registerSize === 4 ? (
+                                <>
+                                  <option value="float">32-bit Float 실수 (1.5, 3.0, 4.5...)</option>
+                                  <option value="int32">32-bit 정수 (1000, 2000, 3000...)</option>
+                                  <option value="mixed">32-bit 정수 / Float 혼합 (정수+실수 교차)</option>
+                                </>
+                              ) : (
+                                <>
+                                  <option value="float">32-bit Float 실수 (2레지스터 쌍)</option>
+                                  <option value="int32">32-bit 정수 (2레지스터 쌍)</option>
+                                  <option value="mixed">32-bit 정수 / Float 혼합 (2B 정수 + 4B 실수)</option>
+                                </>
                               )}
                             </select>
                             {samplePattern === 'fixed' && (
