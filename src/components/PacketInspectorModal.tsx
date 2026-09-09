@@ -200,10 +200,10 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   const isRx = packet.direction === 'rx';
 
   return (
-    <div className={`flex flex-col gap-3.5 ${isDual ? 'px-3 py-1' : ''}`}>
+    <div className={`flex flex-col ${isDual ? 'gap-3' : 'gap-3.5'}`}>
       {/* Pane Sub-header: Direction & Key Stats */}
       <div
-        className={`flex items-center justify-between p-2.5 rounded-lg border select-none ${
+        className={`flex items-center justify-between p-2 sm:p-2.5 rounded-lg border select-none min-h-[44px] gap-2 ${
           isRetro
             ? 'bg-white border-[#808080]'
             : isDark
@@ -215,13 +215,13 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
             : 'bg-indigo-50/70 border-indigo-200'
         }`}
       >
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 min-w-0 flex-nowrap overflow-x-auto no-scrollbar">
           <span
             style={{
               backgroundColor: isRx ? theme.rxColor : theme.txColor,
               color: theme.textColor || '#000'
             }}
-            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-black uppercase shadow-2xs"
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-black uppercase shadow-2xs shrink-0 whitespace-nowrap"
           >
             {isRx ? <Download size={12} /> : <Send size={12} />}
             <span>
@@ -240,7 +240,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
           </span>
 
           <span
-            className={`font-mono text-xs px-2 py-0.5 rounded ${
+            className={`font-mono text-xs px-2 py-0.5 rounded shrink-0 whitespace-nowrap ${
               isRetro
                 ? 'bg-black/10 text-black'
                 : isDark
@@ -252,7 +252,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
           </span>
 
           <span
-            className={`font-mono text-xs px-2 py-0.5 rounded font-bold ${
+            className={`font-mono text-xs px-2 py-0.5 rounded font-bold shrink-0 whitespace-nowrap ${
               isRetro
                 ? 'bg-[#15213b] text-[#55f2ff]'
                 : isDark
@@ -265,7 +265,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
 
           {analysis && (
             <span
-              className={`text-xs px-2 py-0.5 rounded font-bold border ${
+              className={`text-xs px-2 py-0.5 rounded font-bold border shrink-0 whitespace-nowrap ${
                 analysis.protocol === 'modbus-tcp'
                   ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
                   : analysis.protocol === 'modbus-rtu'
@@ -279,10 +279,10 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
         </div>
 
         {/* Action buttons inside pane */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={handleCopyHex}
-            className={`p-1.5 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
+            className={`px-2 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
               copiedHex
                 ? 'bg-emerald-600 text-white'
                 : isRetro
@@ -299,7 +299,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
 
           <button
             onClick={handleCopyReport}
-            className={`p-1.5 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
+            className={`px-2 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
               copiedReport
                 ? 'bg-emerald-600 text-white'
                 : isRetro
@@ -314,10 +314,10 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
             <span className="text-[11px] font-bold font-sans">리포트</span>
           </button>
 
-          {!isRx && onApplyToSend && (
+          {onApplyToSend && (
             <button
               onClick={() => onApplyToSend(rawHexStr, 'hex')}
-              className={`p-1.5 rounded transition-all text-xs flex items-center gap-1 cursor-pointer ${
+              className={`px-2 py-1 rounded transition-all text-xs flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap ${
                 isRetro
                   ? 'bg-[#000080] text-white hover:bg-blue-900'
                   : 'bg-indigo-600 hover:bg-indigo-500 text-white'
@@ -378,6 +378,103 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
           </div>
         </div>
       )}
+
+      {/* Frame Field Breakdown Table */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-80">
+            <Layers size={13} className="text-indigo-400" />
+            프레임 필드 구조 분석 (Field Breakdown)
+          </span>
+          <span className="text-[10px] opacity-60">총 {analysis?.fields.length || 0}개 필드</span>
+        </div>
+
+        <div
+          className={`rounded border overflow-hidden ${
+            isRetro
+              ? 'bg-white border-[#808080]'
+              : isDark
+              ? 'bg-zinc-900/80 border-zinc-800'
+              : 'bg-white border-zinc-200 shadow-2xs'
+          }`}
+        >
+          <table className="w-full text-left text-[11px] border-collapse font-mono">
+            <thead>
+              <tr
+                className={`border-b select-none text-[10px] font-bold ${
+                  isRetro
+                    ? 'bg-[#ece9d8] text-black border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700'
+                    : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                }`}
+              >
+                <th className="py-1 px-2 w-8 text-center">No</th>
+                <th className="py-1 px-2 w-16 text-center">오프셋</th>
+                <th className="py-1 px-2 w-36">필드명</th>
+                <th className="py-1 px-2 w-28">HEX</th>
+                <th className="py-1 px-2 w-24">파싱 값</th>
+                <th className="py-1 px-2">설명</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {analysis?.fields.map((field, idx) => {
+                const isSelected = selectedField?.name === field.name;
+                const rangeStr =
+                  field.byteRange[0] === field.byteRange[1]
+                    ? `[${field.byteRange[0]}]`
+                    : `[${field.byteRange[0]}..${field.byteRange[1]}]`;
+
+                return (
+                  <tr
+                    key={idx}
+                    onClick={() => setSelectedField(field)}
+                    className={`transition-colors cursor-pointer ${
+                      isSelected
+                        ? isDark
+                          ? 'bg-indigo-950/40 text-indigo-200'
+                          : 'bg-indigo-50 text-indigo-900'
+                        : isDark
+                        ? 'hover:bg-zinc-800/50 text-zinc-300'
+                        : 'hover:bg-zinc-50 text-zinc-700'
+                    }`}
+                  >
+                    <td className="py-1.5 px-2 text-center text-zinc-400">{idx + 1}</td>
+                    <td className="py-1.5 px-2 text-center font-bold text-amber-500 dark:text-amber-400">
+                      {rangeStr}
+                    </td>
+                    <td className="py-1.5 px-2 font-semibold font-sans flex items-center gap-1">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                          field.tagColor === 'rose'
+                            ? 'bg-rose-500'
+                            : field.tagColor === 'emerald'
+                            ? 'bg-emerald-500'
+                            : field.tagColor === 'amber'
+                            ? 'bg-amber-500'
+                            : field.tagColor === 'blue'
+                            ? 'bg-blue-500'
+                            : 'bg-zinc-500'
+                        }`}
+                      />
+                      <span className="truncate">{field.name}</span>
+                    </td>
+                    <td className="py-1.5 px-2 font-bold text-indigo-600 dark:text-indigo-400">
+                      {field.hex}
+                    </td>
+                    <td className="py-1.5 px-2 text-emerald-600 dark:text-emerald-400 font-semibold">
+                      {field.dec !== undefined ? String(field.dec) : '-'}
+                    </td>
+                    <td className="py-1.5 px-2 font-sans text-[11px] text-zinc-500 dark:text-zinc-400">
+                      {field.description}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {/* REGISTER PAYLOAD DECODER SECTION (2B / 4B / 8B / Float / Int) */}
       {analysis?.registerPayload && analysis.registerPayload.length >= 2 && (
@@ -634,103 +731,6 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
           </div>
         </div>
       )}
-
-      {/* Frame Field Breakdown Table */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-80">
-            <Layers size={13} className="text-indigo-400" />
-            프레임 필드 구조 분석 (Field Breakdown)
-          </span>
-          <span className="text-[10px] opacity-60">총 {analysis?.fields.length || 0}개 필드</span>
-        </div>
-
-        <div
-          className={`rounded border overflow-hidden ${
-            isRetro
-              ? 'bg-white border-[#808080]'
-              : isDark
-              ? 'bg-zinc-900/80 border-zinc-800'
-              : 'bg-white border-zinc-200 shadow-2xs'
-          }`}
-        >
-          <table className="w-full text-left text-[11px] border-collapse font-mono">
-            <thead>
-              <tr
-                className={`border-b select-none text-[10px] font-bold ${
-                  isRetro
-                    ? 'bg-[#ece9d8] text-black border-[#808080]'
-                    : isDark
-                    ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700'
-                    : 'bg-zinc-100 text-zinc-600 border-zinc-200'
-                }`}
-              >
-                <th className="py-1 px-2 w-8 text-center">No</th>
-                <th className="py-1 px-2 w-16 text-center">오프셋</th>
-                <th className="py-1 px-2 w-36">필드명</th>
-                <th className="py-1 px-2 w-28">HEX</th>
-                <th className="py-1 px-2 w-24">파싱 값</th>
-                <th className="py-1 px-2">설명</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-              {analysis?.fields.map((field, idx) => {
-                const isSelected = selectedField?.name === field.name;
-                const rangeStr =
-                  field.byteRange[0] === field.byteRange[1]
-                    ? `[${field.byteRange[0]}]`
-                    : `[${field.byteRange[0]}..${field.byteRange[1]}]`;
-
-                return (
-                  <tr
-                    key={idx}
-                    onClick={() => setSelectedField(field)}
-                    className={`transition-colors cursor-pointer ${
-                      isSelected
-                        ? isDark
-                          ? 'bg-indigo-950/40 text-indigo-200'
-                          : 'bg-indigo-50 text-indigo-900'
-                        : isDark
-                        ? 'hover:bg-zinc-800/50 text-zinc-300'
-                        : 'hover:bg-zinc-50 text-zinc-700'
-                    }`}
-                  >
-                    <td className="py-1.5 px-2 text-center text-zinc-400">{idx + 1}</td>
-                    <td className="py-1.5 px-2 text-center font-bold text-amber-500 dark:text-amber-400">
-                      {rangeStr}
-                    </td>
-                    <td className="py-1.5 px-2 font-semibold font-sans flex items-center gap-1">
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          field.tagColor === 'rose'
-                            ? 'bg-rose-500'
-                            : field.tagColor === 'emerald'
-                            ? 'bg-emerald-500'
-                            : field.tagColor === 'amber'
-                            ? 'bg-amber-500'
-                            : field.tagColor === 'blue'
-                            ? 'bg-blue-500'
-                            : 'bg-zinc-500'
-                        }`}
-                      />
-                      <span className="truncate">{field.name}</span>
-                    </td>
-                    <td className="py-1.5 px-2 font-bold text-indigo-600 dark:text-indigo-400">
-                      {field.hex}
-                    </td>
-                    <td className="py-1.5 px-2 text-emerald-600 dark:text-emerald-400 font-semibold">
-                      {field.dec !== undefined ? String(field.dec) : '-'}
-                    </td>
-                    <td className="py-1.5 px-2 font-sans text-[11px] text-zinc-500 dark:text-zinc-400">
-                      {field.description}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {/* Interactive Byte Visualizer Grid & Hex Dump */}
       <div className="space-y-1.5">
