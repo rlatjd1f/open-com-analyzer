@@ -102,51 +102,142 @@ export function calculateCrc32(data: Uint8Array): number {
 }
 
 /**
- * Multi-Radix Converter Utilities (HEX / DEC / OCT / BIN)
+ * Multi-Radix & IEEE-754 Float Converter Utilities (HEX / DEC / OCT / BIN / FLOAT32)
  */
 export interface RadixValues {
   hex: string;
   dec: string;
   oct: string;
   bin: string;
+  float32: string;
 }
 
-export function convertFromRadix(value: string, sourceRadix: 'hex' | 'dec' | 'oct' | 'bin'): RadixValues {
+/**
+ * Convert HEX string (e.g. "3FC0", "3F C0", "3FC00000") to IEEE-754 32-bit Float
+ */
+export function hexToFloat32(
+  hexStr: string,
+  byteOrder: 'ABCD' | 'CDAB' | 'BADC' | 'DCBA' = 'ABCD'
+): { float32: number | null; formatted: string; fullHexPadded: string } {
+  const clean = hexStr.replace(/[^0-9a-fA-F]/g, '');
+  if (!clean) return { float32: null, formatted: '-', fullHexPadded: '' };
+
+  // Pad to 8 hex chars (4 bytes)
+  let padded = clean;
+  if (padded.length < 8) {
+    padded = padded.padEnd(8, '0');
+  } else if (padded.length > 8) {
+    padded = padded.substring(0, 8);
+  }
+
+  const b0 = parseInt(padded.substring(0, 2), 16);
+  const b1 = parseInt(padded.substring(2, 4), 16);
+  const b2 = parseInt(padded.substring(4, 6), 16);
+  const b3 = parseInt(padded.substring(6, 8), 16);
+
+  let ordered = [b0, b1, b2, b3];
+  if (byteOrder === 'CDAB') ordered = [b2, b3, b0, b1];
+  else if (byteOrder === 'BADC') ordered = [b1, b0, b3, b2];
+  else if (byteOrder === 'DCBA') ordered = [b3, b2, b1, b0];
+
+  const buf = new ArrayBuffer(4);
+  const view = new DataView(buf);
+  ordered.forEach((b, i) => view.setUint8(i, b));
+  const val = view.getFloat32(0, false);
+
+  const fullHexPadded = `${padded.substring(0, 2)} ${padded.substring(2, 4)} ${padded.substring(4, 6)} ${padded.substring(6, 8)}`.toUpperCase();
+
+  if (isNaN(val)) return { float32: null, formatted: 'NaN', fullHexPadded };
+  if (!isFinite(val)) return { float32: val, formatted: val > 0 ? '+Infinity' : '-Infinity', fullHexPadded };
+
+  const formatted = Number.isInteger(val) ? val.toFixed(1) : parseFloat(val.toPrecision(7)).toString();
+  return { float32: val, formatted, fullHexPadded };
+}
+
+/**
+ * Convert float number (e.g. 1.5) to IEEE-754 32-bit HEX string
+ */
+export function float32ToHex(
+  num: number,
+  byteOrder: 'ABCD' | 'CDAB' | 'BADC' | 'DCBA' = 'ABCD'
+): { hex: string; hexFormatted: string } {
+  if (isNaN(num)) return { hex: '', hexFormatted: '' };
+  const buf = new ArrayBuffer(4);
+  const view = new DataView(buf);
+  view.setFloat32(0, num, false);
+
+  const b0 = view.getUint8(0);
+  const b1 = view.getUint8(1);
+  const b2 = view.getUint8(2);
+  const b3 = view.getUint8(3);
+
+  let ordered = [b0, b1, b2, b3];
+  if (byteOrder === 'CDAB') ordered = [b2, b3, b0, b1];
+  else if (byteOrder === 'BADC') ordered = [b1, b0, b3, b2];
+  else if (byteOrder === 'DCBA') ordered = [b3, b2, b1, b0];
+
+  const rawHex = ordered.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+  const hexFormatted = ordered.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+  return { hex: rawHex, hexFormatted };
+}
+
+export function convertFromRadix(
+  value: string,
+  sourceRadix: 'hex' | 'dec' | 'oct' | 'bin' | 'float32'
+): RadixValues {
   const clean = value.trim();
   if (!clean) {
-    return { hex: '', dec: '', oct: '', bin: '' };
+    return { hex: '', dec: '', oct: '', bin: '', float32: '' };
+  }
+
+  // 1. If user typed in Float32 (e.g. "1.5", "-3.14")
+  if (sourceRadix === 'float32') {
+    const floatVal = parseFloat(clean);
+    if (isNaN(floatVal)) {
+      return { hex: '', dec: '', oct: '', bin: '', float32: clean };
+    }
+    const { hex: rawHex, hexFormatted } = float32ToHex(floatVal, 'ABCD');
+    const u32 = parseInt(rawHex, 16);
+    return {
+      hex: hexFormatted,
+      dec: u32.toString(10),
+      oct: u32.toString(8),
+      bin: formatBinaryChunks(u32.toString(2)),
+      float32: clean
+    };
   }
 
   let num = 0n;
   try {
     if (sourceRadix === 'hex') {
       const sanitized = clean.replace(/[^0-9a-fA-F]/g, '');
-      if (!sanitized) return { hex: '', dec: '', oct: '', bin: '' };
+      if (!sanitized) return { hex: '', dec: '', oct: '', bin: '', float32: '' };
       num = BigInt('0x' + sanitized);
     } else if (sourceRadix === 'dec') {
       const sanitized = clean.replace(/[^0-9-]/g, '');
-      if (!sanitized || sanitized === '-') return { hex: '', dec: '', oct: '', bin: '' };
+      if (!sanitized || sanitized === '-') return { hex: '', dec: '', oct: '', bin: '', float32: '' };
       num = BigInt(sanitized);
     } else if (sourceRadix === 'oct') {
       const sanitized = clean.replace(/[^0-7]/g, '');
-      if (!sanitized) return { hex: '', dec: '', oct: '', bin: '' };
+      if (!sanitized) return { hex: '', dec: '', oct: '', bin: '', float32: '' };
       num = BigInt('0o' + sanitized);
     } else if (sourceRadix === 'bin') {
       const sanitized = clean.replace(/[^01]/g, '');
-      if (!sanitized) return { hex: '', dec: '', oct: '', bin: '' };
+      if (!sanitized) return { hex: '', dec: '', oct: '', bin: '', float32: '' };
       num = BigInt('0b' + sanitized);
     }
   } catch (e) {
-    return { hex: '', dec: '', oct: '', bin: '' };
+    return { hex: '', dec: '', oct: '', bin: '', float32: '' };
   }
 
   if (num < 0n) {
-    // Negative number representation
+    // Negative integer representation
     return {
       hex: '-' + (-num).toString(16).toUpperCase(),
       dec: num.toString(10),
       oct: '-' + (-num).toString(8),
-      bin: '-' + formatBinaryChunks((-num).toString(2))
+      bin: '-' + formatBinaryChunks((-num).toString(2)),
+      float32: '-'
     };
   }
 
@@ -155,11 +246,21 @@ export function convertFromRadix(value: string, sourceRadix: 'hex' | 'dec' | 'oc
   const rawOct = num.toString(8);
   const rawBin = num.toString(2);
 
+  // Compute float32 representation from the hex string
+  // If hex string has <= 8 characters (32-bit), pad with trailing zeros (e.g. "3FC0" -> "3FC00000" -> 1.5)
+  let float32Str = '-';
+  if (rawHex.length <= 8) {
+    const padded = rawHex.padEnd(8, '0');
+    const { formatted } = hexToFloat32(padded, 'ABCD');
+    float32Str = formatted;
+  }
+
   return {
     hex: formatHexChunks(rawHex),
     dec: rawDec,
     oct: rawOct,
-    bin: formatBinaryChunks(rawBin)
+    bin: formatBinaryChunks(rawBin),
+    float32: float32Str
   };
 }
 

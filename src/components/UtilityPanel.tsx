@@ -8,7 +8,9 @@ import {
   hexStringToBytes,
   bytesToHexString,
   bytesToAscii,
-  asciiToBytes
+  asciiToBytes,
+  hexToFloat32,
+  float32ToHex
 } from '../utils/crc';
 import { ArrowUpRight, Copy, Check } from 'lucide-react';
 
@@ -29,16 +31,19 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
   const [crcInput, setCrcInput] = useState('');
   const [crcAlgorithm, setCrcAlgorithm] = useState<'modbus' | 'ccitt'>('modbus');
 
-  // 3. Binary -> ASCII state
-  const [binToAsciiInput, setBinToAsciiInput] = useState('');
+  // 3. HEX <-> ASCII state
+  const [asciiInput, setAsciiInput] = useState('');
+  const [asciiMode, setAsciiMode] = useState<'hexToAscii' | 'asciiToHex'>('hexToAscii');
 
-  // 4. ASCII -> Binary state
-  const [asciiToBinInput, setAsciiToBinInput] = useState('');
+  // 4. IEEE-754 Float32 <-> HEX state
+  const [floatInput, setFloatInput] = useState('');
+  const [floatMode, setFloatMode] = useState<'hexToFloat' | 'floatToHex'>('hexToFloat');
+  const [floatEndian, setFloatEndian] = useState<'ABCD' | 'CDAB'>('ABCD');
 
   const [copiedCol, setCopiedCol] = useState<number | null>(null);
 
   const handleCopy = (text: string, colIdx: number) => {
-    if (!text || text === '-') return;
+    if (!text || text === '-' || text === 'ERR') return;
     navigator.clipboard.writeText(text);
     setCopiedCol(colIdx);
     setTimeout(() => setCopiedCol(null), 1500);
@@ -95,29 +100,52 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
     }
   }, [crcInput, crcAlgorithm]);
 
-  // 3. Compute Binary -> ASCII
-  const binToAsciiResult = React.useMemo(() => {
-    if (!binToAsciiInput.trim()) return '-';
+  // 3. Compute HEX <-> ASCII
+  const asciiResult = React.useMemo(() => {
+    if (!asciiInput.trim()) return { display: '-', applyVal: '' };
     try {
-      const bytes = hexStringToBytes(binToAsciiInput);
-      if (bytes.length === 0) return '-';
-      return bytesToAscii(bytes);
+      if (asciiMode === 'hexToAscii') {
+        const bytes = hexStringToBytes(asciiInput);
+        if (bytes.length === 0) return { display: '-', applyVal: '' };
+        const text = bytesToAscii(bytes);
+        return { display: text, applyVal: text };
+      } else {
+        const bytes = asciiToBytes(asciiInput);
+        if (bytes.length === 0) return { display: '-', applyVal: '' };
+        const hex = bytesToHexString(bytes);
+        return { display: hex, applyVal: hex.replace(/\s+/g, '') };
+      }
     } catch {
-      return 'ERR';
+      return { display: 'ERR', applyVal: '' };
     }
-  }, [binToAsciiInput]);
+  }, [asciiInput, asciiMode]);
 
-  // 4. Compute ASCII -> Binary
-  const asciiToBinResult = React.useMemo(() => {
-    if (!asciiToBinInput.trim()) return '-';
+  // 4. Compute IEEE-754 Float32 <-> HEX
+  const floatResult = React.useMemo(() => {
+    if (!floatInput.trim()) return { display: '-', applyVal: '', rawHex: '' };
     try {
-      const bytes = asciiToBytes(asciiToBinInput);
-      if (bytes.length === 0) return '-';
-      return bytesToHexString(bytes);
+      if (floatMode === 'hexToFloat') {
+        const { float32, formatted, fullHexPadded } = hexToFloat32(floatInput, floatEndian);
+        if (float32 === null) return { display: 'ERR', applyVal: '', rawHex: '' };
+        return {
+          display: `${formatted} (HEX: ${fullHexPadded})`,
+          applyVal: fullHexPadded.replace(/\s+/g, ''),
+          rawHex: fullHexPadded
+        };
+      } else {
+        const val = parseFloat(floatInput);
+        if (isNaN(val)) return { display: 'ERR', applyVal: '', rawHex: '' };
+        const { hexFormatted, hex } = float32ToHex(val, floatEndian);
+        return {
+          display: hexFormatted,
+          applyVal: hex,
+          rawHex: hexFormatted
+        };
+      }
     } catch {
-      return 'ERR';
+      return { display: 'ERR', applyVal: '', rawHex: '' };
     }
-  }, [asciiToBinInput]);
+  }, [floatInput, floatMode, floatEndian]);
 
   const isRetro = theme.name === 'classic-retro';
   const isDark = theme.name === 'modern-dark';
@@ -266,7 +294,7 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
         </div>
       </div>
 
-      {/* Column 3: Binary -> ASCII */}
+      {/* Column 3: HEX <-> ASCII */}
       <div
         className={`flex flex-col gap-1 p-2 rounded border ${
           isRetro ? 'bg-[#d4d0c8] border-[#ffffff] shadow-sm' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
@@ -279,16 +307,22 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
               : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
           }`}
         >
-          Binary -{'>'} ASCII
+          HEX ↔ ASCII
         </button>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
-          <span>Binary (HEX) 입력</span>
+          <span>{asciiMode === 'hexToAscii' ? 'HEX 바이너리 입력' : 'ASCII 텍스트 입력'}</span>
+          <button
+            onClick={() => setAsciiMode(asciiMode === 'hexToAscii' ? 'asciiToHex' : 'hexToAscii')}
+            className="hover:underline text-indigo-400 font-bold"
+          >
+            [{asciiMode === 'hexToAscii' ? 'HEX→ASCII' : 'ASCII→HEX'}]
+          </button>
         </div>
         <input
           type="text"
-          value={binToAsciiInput}
-          onChange={(e) => setBinToAsciiInput(e.target.value)}
-          placeholder="예: 48656C6C6F"
+          value={asciiInput}
+          onChange={(e) => setAsciiInput(e.target.value)}
+          placeholder={asciiMode === 'hexToAscii' ? '예: 48 65 6C 6C 6F' : '예: Hello'}
           className={`h-6 px-1.5 font-mono text-xs rounded border outline-none ${
             isRetro
               ? 'bg-white text-black border-[#808080]'
@@ -300,7 +334,7 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5 mt-0.5">
           <span>RESULT</span>
           <button
-            onClick={() => handleCopy(binToAsciiResult, 3)}
+            onClick={() => handleCopy(asciiResult.display, 3)}
             className="hover:text-indigo-400 flex items-center gap-0.5"
             title="결과 복사"
           >
@@ -316,9 +350,9 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
               : 'bg-zinc-100 text-cyan-600 border-zinc-300'
           }`}
         >
-          <span className="truncate">{binToAsciiResult}</span>
+          <span className="truncate">{asciiResult.display}</span>
           <button
-            onClick={() => onApplyToSend(binToAsciiResult)}
+            onClick={() => asciiResult.applyVal && onApplyToSend(asciiResult.applyVal)}
             className="ml-1 text-zinc-400 hover:text-indigo-400"
             title="전송창에 적용"
           >
@@ -327,7 +361,7 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
         </div>
       </div>
 
-      {/* Column 4: ASCII -> Binary */}
+      {/* Column 4: IEEE-754 Float32 <-> HEX */}
       <div
         className={`flex flex-col gap-1 p-2 rounded border ${
           isRetro ? 'bg-[#d4d0c8] border-[#ffffff] shadow-sm' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
@@ -340,16 +374,31 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
               : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
           }`}
         >
-          ASCII -{'>'} Binary
+          Float32 (IEEE 754) ↔ HEX
         </button>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
-          <span>ASCII 텍스트 입력</span>
+          <span>{floatMode === 'hexToFloat' ? 'HEX 입력 (예: 3FC0)' : '실수 입력 (예: 1.5)'}</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setFloatEndian(floatEndian === 'ABCD' ? 'CDAB' : 'ABCD')}
+              className="hover:underline text-amber-500 font-bold"
+              title="바이트/워드 순서 전환 (ABCD / CDAB)"
+            >
+              [{floatEndian}]
+            </button>
+            <button
+              onClick={() => setFloatMode(floatMode === 'hexToFloat' ? 'floatToHex' : 'hexToFloat')}
+              className="hover:underline text-indigo-400 font-bold"
+            >
+              [{floatMode === 'hexToFloat' ? 'HEX→Float' : 'Float→HEX'}]
+            </button>
+          </div>
         </div>
         <input
           type="text"
-          value={asciiToBinInput}
-          onChange={(e) => setAsciiToBinInput(e.target.value)}
-          placeholder="예: Hello"
+          value={floatInput}
+          onChange={(e) => setFloatInput(e.target.value)}
+          placeholder={floatMode === 'hexToFloat' ? '예: 3F C0 또는 3FC00000' : '예: 1.5'}
           className={`h-6 px-1.5 font-mono text-xs rounded border outline-none ${
             isRetro
               ? 'bg-white text-black border-[#808080]'
@@ -359,9 +408,9 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           }`}
         />
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5 mt-0.5">
-          <span>RESULT (HEX)</span>
+          <span>RESULT</span>
           <button
-            onClick={() => handleCopy(asciiToBinResult.replace(/\s+/g, ''), 4)}
+            onClick={() => handleCopy(floatResult.display.split(' ')[0], 4)}
             className="hover:text-indigo-400 flex items-center gap-0.5"
             title="결과 복사"
           >
@@ -373,13 +422,13 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
             isRetro
               ? 'bg-[#ffffff] text-black border-[#808080]'
               : isDark
-              ? 'bg-zinc-950 text-purple-400 border-zinc-800'
-              : 'bg-zinc-100 text-purple-600 border-zinc-300'
+              ? 'bg-zinc-950 text-emerald-400 border-zinc-800'
+              : 'bg-zinc-100 text-emerald-600 border-zinc-300'
           }`}
         >
-          <span className="truncate">{asciiToBinResult}</span>
+          <span className="truncate">{floatResult.display}</span>
           <button
-            onClick={() => onApplyToSend(asciiToBinResult.replace(/\s+/g, ''))}
+            onClick={() => floatResult.applyVal && onApplyToSend(floatResult.applyVal)}
             className="ml-1 text-zinc-400 hover:text-indigo-400"
             title="전송창에 적용"
           >
@@ -390,3 +439,4 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
     </div>
   );
 };
+export default UtilityPanel;

@@ -235,12 +235,13 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   const [tailHex, setTailHex] = useState<string>('03'); // ETX
 
   // --- 3. Radix Calculator State ---
-  const [activeRadix, setActiveRadix] = useState<'hex' | 'dec' | 'oct' | 'bin'>('dec');
+  const [activeRadix, setActiveRadix] = useState<'hex' | 'dec' | 'oct' | 'bin' | 'float32'>('float32');
   const [radixInputs, setRadixInputs] = useState<RadixValues>({
-    hex: '0A',
-    dec: '10',
-    oct: '12',
-    bin: '0000 1010'
+    hex: '3F C0 00 00',
+    dec: '1069547520',
+    float32: '1.5',
+    oct: '7760000000',
+    bin: '0011 1111 1100 0000 0000 0000 0000 0000'
   });
 
   const [copied, setCopied] = useState(false);
@@ -257,7 +258,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
   }, [isOpen, onClose]);
 
   // --- Radix Calculation Synchronizer ---
-  const handleRadixChange = (val: string, radix: 'hex' | 'dec' | 'oct' | 'bin') => {
+  const handleRadixChange = (val: string, radix: 'hex' | 'dec' | 'oct' | 'bin' | 'float32') => {
     setActiveRadix(radix);
     const result = convertFromRadix(val, radix);
     setRadixInputs({
@@ -1754,7 +1755,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
               {/* 16진수 HEX */}
               <div className={`p-2 rounded border ${activeRadix === 'hex' ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-700/50'}`}>
                 <div className="flex items-center justify-between mb-1">
@@ -1773,7 +1774,7 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                   value={radixInputs.hex}
                   onChange={(e) => handleRadixChange(e.target.value, 'hex')}
                   onFocus={() => setActiveRadix('hex')}
-                  placeholder="예: 0A 1F"
+                  placeholder="예: 3F C0"
                   className="w-full p-1.5 rounded border font-mono text-xs bg-transparent uppercase font-bold"
                 />
               </div>
@@ -1798,6 +1799,29 @@ export const PacketBuilderModal: React.FC<PacketBuilderModalProps> = ({
                   onFocus={() => setActiveRadix('dec')}
                   placeholder="예: 10"
                   className="w-full p-1.5 rounded border font-mono text-xs bg-transparent font-bold"
+                />
+              </div>
+
+              {/* 실수 Float32 (IEEE 754) */}
+              <div className={`p-2 rounded border ${activeRadix === 'float32' ? 'border-amber-500 bg-amber-500/5' : 'border-zinc-700/50'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-bold text-[11px] text-cyan-400">실수 (Float32)</span>
+                  <button
+                    type="button"
+                    onClick={() => handleInsertRadixToPayload(radixInputs.hex)}
+                    className="text-[10px] text-indigo-400 hover:underline flex items-center gap-0.5"
+                    title="패킷에 이 4바이트(Float) 추가"
+                  >
+                    <Plus size={10} /> 패킷에 추가
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={radixInputs.float32}
+                  onChange={(e) => handleRadixChange(e.target.value, 'float32')}
+                  onFocus={() => setActiveRadix('float32')}
+                  placeholder="예: 1.5"
+                  className="w-full p-1.5 rounded border font-mono text-xs bg-transparent font-bold text-emerald-400"
                 />
               </div>
 
