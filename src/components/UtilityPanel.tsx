@@ -301,21 +301,23 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
         }`}
       >
         <button
-          className={`py-0.5 rounded font-bold text-xs text-center ${
+          onClick={() => setAsciiMode(asciiMode === 'hexToAscii' ? 'asciiToHex' : 'hexToAscii')}
+          className={`py-0.5 rounded font-bold text-xs text-center transition-colors cursor-pointer ${
             isRetro
-              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black'
-              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black hover:bg-white'
+              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20'
           }`}
+          title="클릭 시 HEX ↔ ASCII 모드 전환"
         >
-          HEX ↔ ASCII
+          {asciiMode === 'hexToAscii' ? 'HEX → ASCII 변환' : 'ASCII → HEX 변환'}
         </button>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
           <span>{asciiMode === 'hexToAscii' ? 'HEX 바이너리 입력' : 'ASCII 텍스트 입력'}</span>
           <button
             onClick={() => setAsciiMode(asciiMode === 'hexToAscii' ? 'asciiToHex' : 'hexToAscii')}
-            className="hover:underline text-indigo-400 font-bold"
+            className="hover:underline text-indigo-400 font-bold cursor-pointer"
           >
-            [{asciiMode === 'hexToAscii' ? 'HEX→ASCII' : 'ASCII→HEX'}]
+            [{asciiMode === 'hexToAscii' ? 'ASCII→HEX' : 'HEX→ASCII'}]
           </button>
         </div>
         <input
@@ -332,10 +334,10 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           }`}
         />
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5 mt-0.5">
-          <span>RESULT</span>
+          <span>RESULT ({asciiMode === 'hexToAscii' ? 'ASCII' : 'HEX'})</span>
           <button
             onClick={() => handleCopy(asciiResult.display, 3)}
-            className="hover:text-indigo-400 flex items-center gap-0.5"
+            className="hover:text-indigo-400 flex items-center gap-0.5 cursor-pointer"
             title="결과 복사"
           >
             {copiedCol === 3 ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
@@ -353,7 +355,7 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           <span className="truncate">{asciiResult.display}</span>
           <button
             onClick={() => asciiResult.applyVal && onApplyToSend(asciiResult.applyVal)}
-            className="ml-1 text-zinc-400 hover:text-indigo-400"
+            className="ml-1 text-zinc-400 hover:text-indigo-400 cursor-pointer"
             title="전송창에 적용"
           >
             <ArrowUpRight size={12} />
@@ -361,36 +363,38 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
         </div>
       </div>
 
-      {/* Column 4: IEEE-754 Float32 <-> HEX */}
+      {/* Column 4: IEEE-754 Float32 <-> HEX / ASCII */}
       <div
         className={`flex flex-col gap-1 p-2 rounded border ${
           isRetro ? 'bg-[#d4d0c8] border-[#ffffff] shadow-sm' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
         }`}
       >
         <button
-          className={`py-0.5 rounded font-bold text-xs text-center ${
+          onClick={() => setFloatMode(floatMode === 'hexToFloat' ? 'floatToHex' : 'hexToFloat')}
+          className={`py-0.5 rounded font-bold text-xs text-center transition-colors cursor-pointer ${
             isRetro
-              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black'
-              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black hover:bg-white'
+              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20'
           }`}
+          title="클릭 시 HEX ↔ Float(ASCII) 모드 전환"
         >
-          Float32 (IEEE 754) ↔ HEX
+          {floatMode === 'hexToFloat' ? 'HEX → Float32 변환' : 'ASCII(실수) → Float32 HEX 변환'}
         </button>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
-          <span>{floatMode === 'hexToFloat' ? 'HEX 입력 (예: 3FC0)' : '실수 입력 (예: 1.5)'}</span>
+          <span>{floatMode === 'hexToFloat' ? 'HEX 입력 (예: 3F C0)' : 'ASCII 실수 입력 (예: 1.5)'}</span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setFloatEndian(floatEndian === 'ABCD' ? 'CDAB' : 'ABCD')}
-              className="hover:underline text-amber-500 font-bold"
+              className="hover:underline text-amber-500 font-bold cursor-pointer"
               title="바이트/워드 순서 전환 (ABCD / CDAB)"
             >
               [{floatEndian}]
             </button>
             <button
               onClick={() => setFloatMode(floatMode === 'hexToFloat' ? 'floatToHex' : 'hexToFloat')}
-              className="hover:underline text-indigo-400 font-bold"
+              className="hover:underline text-indigo-400 font-bold cursor-pointer"
             >
-              [{floatMode === 'hexToFloat' ? 'HEX→Float' : 'Float→HEX'}]
+              [{floatMode === 'hexToFloat' ? 'ASCII→HEX' : 'HEX→Float'}]
             </button>
           </div>
         </div>
@@ -408,10 +412,10 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           }`}
         />
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5 mt-0.5">
-          <span>RESULT</span>
+          <span>RESULT ({floatMode === 'hexToFloat' ? 'Float32 실수' : 'HEX 바이트'})</span>
           <button
             onClick={() => handleCopy(floatResult.display.split(' ')[0], 4)}
-            className="hover:text-indigo-400 flex items-center gap-0.5"
+            className="hover:text-indigo-400 flex items-center gap-0.5 cursor-pointer"
             title="결과 복사"
           >
             {copiedCol === 4 ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
@@ -429,7 +433,7 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           <span className="truncate">{floatResult.display}</span>
           <button
             onClick={() => floatResult.applyVal && onApplyToSend(floatResult.applyVal)}
-            className="ml-1 text-zinc-400 hover:text-indigo-400"
+            className="ml-1 text-zinc-400 hover:text-indigo-400 cursor-pointer"
             title="전송창에 적용"
           >
             <ArrowUpRight size={12} />
