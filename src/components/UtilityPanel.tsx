@@ -12,7 +12,7 @@ import {
   hexToFloat32,
   float32ToHex
 } from '../utils/crc';
-import { ArrowUpRight, Copy, Check } from 'lucide-react';
+import { ArrowUpRight, Copy, Check, ArrowLeftRight } from 'lucide-react';
 
 interface UtilityPanelProps {
   theme: AppTheme;
@@ -166,22 +166,52 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           isRetro ? 'bg-[#d4d0c8] border-[#ffffff] shadow-sm' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
         }`}
       >
-        <button
-          className={`py-0.5 rounded font-bold text-xs text-center ${
+        <div
+          className={`flex items-center justify-between p-0.5 rounded border text-[11px] font-semibold ${
             isRetro
-              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black'
-              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+              ? 'bg-[#e0ded8] border-[#808080]'
+              : isDark
+              ? 'bg-zinc-950/70 border-zinc-800'
+              : 'bg-zinc-100 border-zinc-200'
           }`}
         >
-          Sum Check
-        </button>
+          <span className="px-1.5 font-bold text-xs text-indigo-400">Sum Check</span>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setSumMode('hex')}
+              className={`px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all ${
+                sumMode === 'hex'
+                  ? isRetro
+                    ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                    : 'bg-indigo-600 text-white font-bold shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              HEX
+            </button>
+            <button
+              onClick={() => setSumMode('ascii')}
+              className={`px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all ${
+                sumMode === 'ascii'
+                  ? isRetro
+                    ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                    : 'bg-indigo-600 text-white font-bold shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              ASCII
+            </button>
+          </div>
+        </div>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
-          <span>{sumMode === 'hex' ? 'HEX 입력' : 'ASCII 입력'}</span>
+          <span>{sumMode === 'hex' ? 'HEX 바이너리 입력' : 'ASCII 텍스트 입력'}</span>
           <button
             onClick={() => setSumMode(sumMode === 'hex' ? 'ascii' : 'hex')}
-            className="hover:underline text-indigo-400"
+            className="hover:underline text-indigo-400 flex items-center gap-0.5 cursor-pointer"
+            title="모드 전환"
           >
-            [모드전환]
+            <ArrowLeftRight size={10} />
+            <span>전환</span>
           </button>
         </div>
         <input
@@ -233,22 +263,52 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           isRetro ? 'bg-[#d4d0c8] border-[#ffffff] shadow-sm' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
         }`}
       >
-        <button
-          className={`py-0.5 rounded font-bold text-xs text-center ${
+        <div
+          className={`flex items-center justify-between p-0.5 rounded border text-[11px] font-semibold ${
             isRetro
-              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black'
-              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'
+              ? 'bg-[#e0ded8] border-[#808080]'
+              : isDark
+              ? 'bg-zinc-950/70 border-zinc-800'
+              : 'bg-zinc-100 border-zinc-200'
           }`}
         >
-          CRC-16 Check
-        </button>
+          <span className="px-1.5 font-bold text-xs text-indigo-400">CRC-16 Check</span>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setCrcAlgorithm('modbus')}
+              className={`px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all ${
+                crcAlgorithm === 'modbus'
+                  ? isRetro
+                    ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                    : 'bg-indigo-600 text-white font-bold shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              Modbus
+            </button>
+            <button
+              onClick={() => setCrcAlgorithm('ccitt')}
+              className={`px-1.5 py-0.5 rounded text-[10px] cursor-pointer transition-all ${
+                crcAlgorithm === 'ccitt'
+                  ? isRetro
+                    ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                    : 'bg-indigo-600 text-white font-bold shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              CCITT
+            </button>
+          </div>
+        </div>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
           <span>Binary (HEX) 입력</span>
           <button
             onClick={() => setCrcAlgorithm(crcAlgorithm === 'modbus' ? 'ccitt' : 'modbus')}
-            className="hover:underline text-indigo-400"
+            className="hover:underline text-indigo-400 flex items-center gap-0.5 cursor-pointer"
+            title="알고리즘 전환"
           >
-            [{crcAlgorithm === 'modbus' ? 'Modbus' : 'CCITT'}]
+            <ArrowLeftRight size={10} />
+            <span>전환</span>
           </button>
         </div>
         <input
@@ -300,24 +360,49 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           isRetro ? 'bg-[#d4d0c8] border-[#ffffff] shadow-sm' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
         }`}
       >
-        <button
-          onClick={() => setAsciiMode(asciiMode === 'hexToAscii' ? 'asciiToHex' : 'hexToAscii')}
-          className={`py-0.5 rounded font-bold text-xs text-center transition-colors cursor-pointer ${
+        <div
+          className={`flex items-center p-0.5 rounded border text-[11px] font-semibold ${
             isRetro
-              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black hover:bg-white'
-              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20'
+              ? 'bg-[#e0ded8] border-[#808080]'
+              : isDark
+              ? 'bg-zinc-950/70 border-zinc-800'
+              : 'bg-zinc-100 border-zinc-200'
           }`}
-          title="클릭 시 HEX ↔ ASCII 모드 전환"
         >
-          {asciiMode === 'hexToAscii' ? 'HEX → ASCII 변환' : 'ASCII → HEX 변환'}
-        </button>
+          <button
+            onClick={() => setAsciiMode('hexToAscii')}
+            className={`flex-1 py-0.5 rounded text-center transition-all cursor-pointer ${
+              asciiMode === 'hexToAscii'
+                ? isRetro
+                  ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                  : 'bg-indigo-600 text-white font-bold shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            HEX → ASCII
+          </button>
+          <button
+            onClick={() => setAsciiMode('asciiToHex')}
+            className={`flex-1 py-0.5 rounded text-center transition-all cursor-pointer ${
+              asciiMode === 'asciiToHex'
+                ? isRetro
+                  ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                  : 'bg-indigo-600 text-white font-bold shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            ASCII → HEX
+          </button>
+        </div>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
           <span>{asciiMode === 'hexToAscii' ? 'HEX 바이너리 입력' : 'ASCII 텍스트 입력'}</span>
           <button
             onClick={() => setAsciiMode(asciiMode === 'hexToAscii' ? 'asciiToHex' : 'hexToAscii')}
-            className="hover:underline text-indigo-400 font-bold cursor-pointer"
+            className="hover:underline text-indigo-400 font-medium cursor-pointer flex items-center gap-0.5"
+            title="모드 전환"
           >
-            [{asciiMode === 'hexToAscii' ? 'ASCII→HEX' : 'HEX→ASCII'}]
+            <ArrowLeftRight size={10} />
+            <span>전환</span>
           </button>
         </div>
         <input
@@ -369,32 +454,61 @@ export const UtilityPanel: React.FC<UtilityPanelProps> = ({
           isRetro ? 'bg-[#d4d0c8] border-[#ffffff] shadow-sm' : isDark ? 'bg-zinc-900/60 border-zinc-800' : 'bg-white border-zinc-200 shadow-sm'
         }`}
       >
-        <button
-          onClick={() => setFloatMode(floatMode === 'hexToFloat' ? 'floatToHex' : 'hexToFloat')}
-          className={`py-0.5 rounded font-bold text-xs text-center transition-colors cursor-pointer ${
+        <div
+          className={`flex items-center p-0.5 rounded border text-[11px] font-semibold ${
             isRetro
-              ? 'bg-[#e0ded8] border border-[#808080] shadow-sm text-black hover:bg-white'
-              : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500/20'
+              ? 'bg-[#e0ded8] border-[#808080]'
+              : isDark
+              ? 'bg-zinc-950/70 border-zinc-800'
+              : 'bg-zinc-100 border-zinc-200'
           }`}
-          title="클릭 시 HEX ↔ Float(ASCII) 모드 전환"
         >
-          {floatMode === 'hexToFloat' ? 'HEX → Float32 변환' : 'ASCII(실수) → Float32 HEX 변환'}
-        </button>
+          <button
+            onClick={() => setFloatMode('hexToFloat')}
+            className={`flex-1 py-0.5 rounded text-center transition-all cursor-pointer ${
+              floatMode === 'hexToFloat'
+                ? isRetro
+                  ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                  : 'bg-indigo-600 text-white font-bold shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            HEX → Float32
+          </button>
+          <button
+            onClick={() => setFloatMode('floatToHex')}
+            className={`flex-1 py-0.5 rounded text-center transition-all cursor-pointer ${
+              floatMode === 'floatToHex'
+                ? isRetro
+                  ? 'bg-white border border-[#808080] text-black font-bold shadow-sm'
+                  : 'bg-indigo-600 text-white font-bold shadow-sm'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            Float32 → HEX
+          </button>
+        </div>
         <div className="flex items-center justify-between text-[10px] text-zinc-500 px-0.5">
-          <span>{floatMode === 'hexToFloat' ? 'HEX 입력 (예: 3F C0)' : 'ASCII 실수 입력 (예: 1.5)'}</span>
+          <span>{floatMode === 'hexToFloat' ? 'HEX 바이너리 (예: 3F C0)' : '실수 입력 (예: 1.5)'}</span>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setFloatEndian(floatEndian === 'ABCD' ? 'CDAB' : 'ABCD')}
-              className="hover:underline text-amber-500 font-bold cursor-pointer"
-              title="바이트/워드 순서 전환 (ABCD / CDAB)"
+              className={`px-1 py-0.2 rounded font-mono font-bold text-[10px] cursor-pointer transition-colors border ${
+                floatEndian === 'ABCD'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20'
+                  : 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20'
+              }`}
+              title="바이트/워드 순서 전환 (ABCD: 빅엔디언 / CDAB: 워드스왑)"
             >
               [{floatEndian}]
             </button>
             <button
               onClick={() => setFloatMode(floatMode === 'hexToFloat' ? 'floatToHex' : 'hexToFloat')}
-              className="hover:underline text-indigo-400 font-bold cursor-pointer"
+              className="hover:underline text-indigo-400 font-medium cursor-pointer flex items-center gap-0.5"
+              title="모드 전환"
             >
-              [{floatMode === 'hexToFloat' ? 'ASCII→HEX' : 'HEX→Float'}]
+              <ArrowLeftRight size={10} />
+              <span>전환</span>
             </button>
           </div>
         </div>
