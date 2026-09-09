@@ -46,7 +46,8 @@ interface PacketInspectPaneProps {
   isRetro: boolean;
   isDark: boolean;
   isDual: boolean;
-  role: 'tx' | 'rx' | 'standalone';
+  role: 'tx' | 'rx' | 'standalone' | 'req' | 'res';
+  customRoleTitle?: string;
   onApplyToSend?: (data: string, format: 'hex' | 'ascii') => void;
 }
 
@@ -57,6 +58,7 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
   isDark,
   isDual,
   role,
+  customRoleTitle,
   onApplyToSend
 }) => {
   const [copiedHex, setCopiedHex] = useState(false);
@@ -222,7 +224,19 @@ const PacketInspectPane: React.FC<PacketInspectPaneProps> = ({
             className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-black uppercase shadow-2xs"
           >
             {isRx ? <Download size={12} /> : <Send size={12} />}
-            <span>{role === 'tx' ? 'TX (송신 요청)' : role === 'rx' ? 'RX (수신 응답)' : isRx ? 'RX (수신)' : 'TX (송신)'}</span>
+            <span>
+              {customRoleTitle || (
+                role === 'req'
+                  ? (isRx ? 'RX (수신 요청)' : 'TX (송신 요청)')
+                  : role === 'res'
+                  ? (isRx ? 'RX (수신 응답)' : 'TX (송신 응답)')
+                  : role === 'tx'
+                  ? 'TX (송신 요청)'
+                  : role === 'rx'
+                  ? 'RX (수신 응답)'
+                  : isRx ? 'RX (수신)' : 'TX (송신)'
+              )}
+            </span>
           </span>
 
           <span
@@ -801,8 +815,8 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
     return findPairedPacket(packet, allPackets);
   }, [packet, allPackets]);
 
-  // 2. View mode state: 'dual' | 'tx' | 'rx'
-  const [viewMode, setViewMode] = useState<'dual' | 'tx' | 'rx'>('dual');
+  // 2. View mode state: 'dual' | 'left' | 'right'
+  const [viewMode, setViewMode] = useState<'dual' | 'left' | 'right'>('dual');
 
   // Reset viewMode to 'dual' whenever a new paired packet is opened
   useEffect(() => {
@@ -855,7 +869,9 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
             <Search size={18} className={isRetro ? 'text-white' : 'text-indigo-500 dark:text-indigo-400'} />
             <span className="font-bold text-sm tracking-wide">
               {isDualActive
-                ? 'TX ⇄ RX 연계 패킷 통합 분석기 (Dual Inspector)'
+                ? pairInfo?.flowOrder === 'rx-first'
+                  ? 'RX ⇄ TX 연계 패킷 통합 분석기 (Dual Inspector)'
+                  : 'TX ⇄ RX 연계 패킷 통합 분석기 (Dual Inspector)'
                 : '패킷 프로토콜 상세 분석기 (Packet Inspector)'}
             </span>
 
@@ -878,7 +894,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
             )}
           </div>
 
-          {/* Center/Right: View Mode Selector (Dual / TX / RX) */}
+          {/* Center/Right: View Mode Selector (Dual / Left / Right) */}
           <div className="flex items-center gap-2">
             {pairInfo && (
               <div
@@ -901,15 +917,17 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
                       ? 'text-zinc-400 hover:text-zinc-200'
                       : 'text-zinc-600 hover:text-black'
                   }`}
-                  title="TX 요청과 RX 응답을 좌우로 나란히 비교"
+                  title="요청과 응답을 좌우로 나란히 비교"
                 >
                   <ArrowRightLeft size={12} />
-                  <span>TX+RX 듀얼 비교</span>
+                  <span>
+                    {pairInfo.flowOrder === 'rx-first' ? 'RX+TX 듀얼 비교' : 'TX+RX 듀얼 비교'}
+                  </span>
                 </button>
                 <button
-                  onClick={() => setViewMode('tx')}
+                  onClick={() => setViewMode('left')}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all cursor-pointer ${
-                    viewMode === 'tx'
+                    viewMode === 'left'
                       ? isRetro
                         ? 'bg-[#000080] text-white font-bold'
                         : 'bg-indigo-600 text-white font-bold shadow-xs'
@@ -917,14 +935,24 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
                       ? 'text-zinc-400 hover:text-zinc-200'
                       : 'text-zinc-600 hover:text-black'
                   }`}
+                  title={pairInfo.flowOrder === 'rx-first' ? 'RX 수신 요청 패킷만 보기' : 'TX 송신 요청 패킷만 보기'}
                 >
-                  <Send size={11} />
-                  <span>TX만</span>
+                  {pairInfo.flowOrder === 'rx-first' ? (
+                    <>
+                      <Download size={11} />
+                      <span>RX 요청만</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={11} />
+                      <span>TX 요청만</span>
+                    </>
+                  )}
                 </button>
                 <button
-                  onClick={() => setViewMode('rx')}
+                  onClick={() => setViewMode('right')}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded transition-all cursor-pointer ${
-                    viewMode === 'rx'
+                    viewMode === 'right'
                       ? isRetro
                         ? 'bg-[#000080] text-white font-bold'
                         : 'bg-indigo-600 text-white font-bold shadow-xs'
@@ -932,9 +960,19 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
                       ? 'text-zinc-400 hover:text-zinc-200'
                       : 'text-zinc-600 hover:text-black'
                   }`}
+                  title={pairInfo.flowOrder === 'rx-first' ? 'TX 송신 응답 패킷만 보기' : 'RX 수신 응답 패킷만 보기'}
                 >
-                  <Download size={11} />
-                  <span>RX만</span>
+                  {pairInfo.flowOrder === 'rx-first' ? (
+                    <>
+                      <Send size={11} />
+                      <span>TX 응답만</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download size={11} />
+                      <span>RX 응답만</span>
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -956,50 +994,62 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
           {pairInfo ? (
             viewMode === 'dual' ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 divide-y lg:divide-y-0 lg:divide-x divide-zinc-200 dark:divide-zinc-800">
-                {/* Left: TX Request Pane */}
+                {/* Left: Request (Stimulus) Pane */}
                 <div className="lg:pr-2">
                   <PacketInspectPane
-                    packet={pairInfo.txPacket}
+                    packet={pairInfo.leftPacket}
                     theme={theme}
                     isRetro={isRetro}
                     isDark={isDark}
                     isDual={true}
-                    role="tx"
+                    role="req"
+                    customRoleTitle={
+                      pairInfo.flowOrder === 'rx-first' ? 'RX (수신 요청)' : 'TX (송신 요청)'
+                    }
                     onApplyToSend={onApplyToSend}
                   />
                 </div>
 
-                {/* Right: RX Response Pane */}
+                {/* Right: Response Pane */}
                 <div className="lg:pl-4 pt-4 lg:pt-0">
                   <PacketInspectPane
-                    packet={pairInfo.rxPacket}
+                    packet={pairInfo.rightPacket}
                     theme={theme}
                     isRetro={isRetro}
                     isDark={isDark}
                     isDual={true}
-                    role="rx"
+                    role="res"
+                    customRoleTitle={
+                      pairInfo.flowOrder === 'rx-first' ? 'TX (송신 응답)' : 'RX (수신 응답)'
+                    }
                     onApplyToSend={onApplyToSend}
                   />
                 </div>
               </div>
-            ) : viewMode === 'tx' ? (
+            ) : viewMode === 'left' ? (
               <PacketInspectPane
-                packet={pairInfo.txPacket}
+                packet={pairInfo.leftPacket}
                 theme={theme}
                 isRetro={isRetro}
                 isDark={isDark}
                 isDual={false}
-                role="tx"
+                role="req"
+                customRoleTitle={
+                  pairInfo.flowOrder === 'rx-first' ? 'RX (수신 요청)' : 'TX (송신 요청)'
+                }
                 onApplyToSend={onApplyToSend}
               />
             ) : (
               <PacketInspectPane
-                packet={pairInfo.rxPacket}
+                packet={pairInfo.rightPacket}
                 theme={theme}
                 isRetro={isRetro}
                 isDark={isDark}
                 isDual={false}
-                role="rx"
+                role="res"
+                customRoleTitle={
+                  pairInfo.flowOrder === 'rx-first' ? 'TX (송신 응답)' : 'RX (수신 응답)'
+                }
                 onApplyToSend={onApplyToSend}
               />
             )
