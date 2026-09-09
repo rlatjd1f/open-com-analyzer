@@ -11,9 +11,19 @@ import {
   Layers,
   FileText,
   Terminal,
-  Activity
+  Activity,
+  Sparkles,
+  Database
 } from 'lucide-react';
-import { analyzePacket, type ParsedPacketResult, type PacketField } from '../utils/packetParser';
+import {
+  analyzePacket,
+  guessModbusDataType,
+  decodeRegisterPayload,
+  type ParsedPacketResult,
+  type PacketField,
+  type HeuristicTypeGuess,
+  type DecodedRegisterRow
+} from '../utils/packetParser';
 import { hexStringToBytes } from '../utils/crc';
 
 interface PacketInspectorModalProps {
@@ -36,7 +46,14 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
 
   const [copiedHex, setCopiedHex] = useState(false);
   const [copiedReport, setCopiedReport] = useState(false);
+  const [copiedRegs, setCopiedRegs] = useState(false);
+  const [copiedRegIndex, setCopiedRegIndex] = useState<number | null>(null);
   const [selectedField, setSelectedField] = useState<PacketField | null>(null);
+
+  // Register Payload Decoder Settings State
+  const [unitSize, setUnitSize] = useState<2 | 4 | 8>(4);
+  const [dataType, setDataType] = useState<string>('float32');
+  const [byteOrder, setByteOrder] = useState<string>('ABCD');
 
   // Close modal on ESC key press
   useEffect(() => {
@@ -67,6 +84,42 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
     if (!packet || packetBytes.length === 0) return null;
     return analyzePacket(packetBytes);
   }, [packet, packetBytes]);
+
+  // Heuristic Type Guess for Register Payload
+  const typeGuess = useMemo<HeuristicTypeGuess | null>(() => {
+    if (!analysis?.registerPayload || analysis.registerPayload.length === 0) return null;
+    return guessModbusDataType(analysis.registerPayload);
+  }, [analysis?.registerPayload]);
+
+  // Auto-initialize register format settings based on heuristic guess when packet opens
+  useEffect(() => {
+    if (typeGuess) {
+      setUnitSize(typeGuess.unitSize);
+      setDataType(typeGuess.dataType);
+      setByteOrder(typeGuess.byteOrder);
+    }
+  }, [typeGuess]);
+
+  // Handle unit size changes & auto-adjust data type / byte order to sensible defaults
+  const handleUnitSizeChange = (newSize: 2 | 4 | 8) => {
+    setUnitSize(newSize);
+    if (newSize === 2) {
+      setDataType('uint16');
+      setByteOrder('AB');
+    } else if (newSize === 4) {
+      setDataType('float32');
+      setByteOrder('ABCD');
+    } else if (newSize === 8) {
+      setDataType('float64');
+      setByteOrder('ABCDEFGH');
+    }
+  };
+
+  // Decode Register Rows
+  const decodedRegisters = useMemo<DecodedRegisterRow[]>(() => {
+    if (!analysis?.registerPayload || analysis.registerPayload.length === 0) return [];
+    return decodeRegisterPayload(analysis.registerPayload, unitSize, dataType, byteOrder, 0);
+  }, [analysis?.registerPayload, unitSize, dataType, byteOrder]);
 
   if (!isOpen || !packet) return null;
 
@@ -105,14 +158,41 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
         const range = f.byteRange[0] === f.byteRange[1] ? `[${f.byteRange[0]}]` : `[${f.byteRange[0]}..${f.byteRange[1]}]`;
         const val = f.dec !== undefined ? ` (값: ${f.dec})` : '';
         return `${i + 1}. ${range} ${f.name}: 0x${f.hex.replace(/\s+/g, '')}${val} - ${f.description}`;
-      }),
-      ``,
-      `[원문 HEX]`,
-      rawHexStr
+      })
     ];
+
+    if (decodedRegisters.length > 0) {
+      lines.push(``);
+      lines.push(`[레지스터 디코딩 (${unitSize}B 단위 / ${dataType} / ${byteOrder})]`);
+      decodedRegisters.forEach((row) => {
+        lines.push(`${row.registerRangeLabel} (${row.byteOffsetLabel}): ${row.formattedValue} [HEX: ${row.hex}]`);
+      });
+    }
+
+    lines.push(``);
+    lines.push(`[원문 HEX]`);
+    lines.push(rawHexStr);
+
     navigator.clipboard.writeText(lines.join('\n'));
     setCopiedReport(true);
     setTimeout(() => setCopiedReport(false), 1500);
+  };
+
+  const handleCopyAllRegisters = () => {
+    if (decodedRegisters.length === 0) return;
+    const lines = [
+      `레지스터\t오프셋\tHEX\t값(${dataType})`,
+      ...decodedRegisters.map((r) => `${r.registerRangeLabel}\t${r.byteOffsetLabel}\t${r.hex}\t${r.formattedValue}`)
+    ];
+    navigator.clipboard.writeText(lines.join('\n'));
+    setCopiedRegs(true);
+    setTimeout(() => setCopiedRegs(false), 1500);
+  };
+
+  const handleCopySingleRegister = (val: string, idx: number) => {
+    navigator.clipboard.writeText(val);
+    setCopiedRegIndex(idx);
+    setTimeout(() => setCopiedRegIndex(null), 1200);
   };
 
   const isRx = packet.direction === 'rx';
@@ -120,7 +200,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
       <div
-        className={`relative w-full max-w-4xl max-h-[90vh] flex flex-col rounded-lg shadow-2xl overflow-hidden border ${
+        className={`relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-lg shadow-2xl overflow-hidden border ${
           isRetro
             ? 'bg-[#d4d0c8] text-black border-[#808080]'
             : isDark
@@ -130,7 +210,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
       >
         {/* Modal Header */}
         <div
-          className={`flex items-center justify-between px-4 py-3 border-b select-none ${
+          className={`flex items-center justify-between px-4 py-3 border-b select-none shrink-0 ${
             isRetro
               ? 'bg-[#000080] text-white'
               : isDark
@@ -138,7 +218,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
               : 'bg-slate-100 border-slate-200'
           }`}
         >
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
             <Search size={18} className={isRetro ? 'text-white' : 'text-indigo-500 dark:text-indigo-400'} />
             <span className="font-bold text-sm tracking-wide">패킷 프로토콜 상세 분석기 (Packet Inspector)</span>
 
@@ -259,6 +339,264 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
                   {analysis.protocol === 'custom-frame' &&
                     '표준 Modbus 시그니처가 없거나 STX/ETX 형태의 일반 시리얼/TCP 데이터 프레임입니다.'}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ------------------------------------------------------------- */}
+          {/* REGISTER PAYLOAD DECODER SECTION (2B / 4B / 8B / Float / Int) */}
+          {/* ------------------------------------------------------------- */}
+          {analysis?.registerPayload && analysis.registerPayload.length >= 2 && (
+            <div
+              className={`p-3.5 rounded-lg border space-y-3 ${
+                isRetro
+                  ? 'bg-[#ece9d8] border-[#808080] shadow-sm'
+                  : isDark
+                  ? 'bg-zinc-900/90 border-indigo-500/30 shadow-md'
+                  : 'bg-indigo-50/40 border-indigo-200 shadow-xs'
+              }`}
+            >
+              {/* Section Header & Heuristic Auto-Detect Banner */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Database size={16} className="text-indigo-500 dark:text-indigo-400" />
+                  <span className="font-bold text-xs uppercase tracking-wider">
+                    레지스터 페이로드 단위별 값 분석 (Register Data Decoder)
+                  </span>
+                  <span className="text-[11px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-500 dark:text-indigo-300 font-bold border border-indigo-500/20">
+                    총 {analysis.registerPayload.length}B ({Math.floor(analysis.registerPayload.length / 2)}개 레지스터)
+                  </span>
+                </div>
+
+                {typeGuess && (
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-500/30 shadow-2xs">
+                      <Sparkles size={12} className="shrink-0" />
+                      <span>추천: {typeGuess.label}</span>
+                    </span>
+                    {(unitSize !== typeGuess.unitSize || dataType !== typeGuess.dataType || byteOrder !== typeGuess.byteOrder) && (
+                      <button
+                        onClick={() => {
+                          setUnitSize(typeGuess.unitSize);
+                          setDataType(typeGuess.dataType);
+                          setByteOrder(typeGuess.byteOrder);
+                        }}
+                        className="text-[11px] px-2 py-0.5 rounded bg-emerald-600 text-white hover:bg-emerald-500 font-bold transition-all shadow-2xs cursor-pointer"
+                      >
+                        추천 적용
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Controls Bar: Unit Size, Data Type, Byte Order */}
+              <div
+                className={`p-2.5 rounded border flex flex-wrap items-center justify-between gap-3 text-xs ${
+                  isRetro
+                    ? 'bg-white border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-950/80 border-zinc-800'
+                    : 'bg-white border-zinc-200'
+                }`}
+              >
+                {/* 1. Unit Size Selector (2B / 4B / 8B) */}
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-zinc-500 dark:text-zinc-400 select-none">단위 크기:</span>
+                  <div className="inline-flex rounded-md p-0.5 bg-zinc-100 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
+                    <button
+                      onClick={() => handleUnitSizeChange(2)}
+                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                        unitSize === 2
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white'
+                      }`}
+                    >
+                      2B (16-bit)
+                    </button>
+                    <button
+                      onClick={() => handleUnitSizeChange(4)}
+                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                        unitSize === 4
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white'
+                      }`}
+                    >
+                      4B (32-bit)
+                    </button>
+                    <button
+                      onClick={() => handleUnitSizeChange(8)}
+                      className={`px-2.5 py-1 rounded text-xs font-bold transition-all ${
+                        unitSize === 8
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-zinc-600 dark:text-zinc-300 hover:text-black dark:hover:text-white'
+                      }`}
+                    >
+                      8B (64-bit)
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Data Type Selector */}
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-zinc-500 dark:text-zinc-400 select-none">표시 형식:</span>
+                  <select
+                    value={dataType}
+                    onChange={(e) => setDataType(e.target.value)}
+                    className={`h-7 px-2 font-mono text-xs rounded border outline-none font-bold cursor-pointer ${
+                      isRetro
+                        ? 'bg-white text-black border-[#808080]'
+                        : isDark
+                        ? 'bg-zinc-800 text-zinc-100 border-zinc-700'
+                        : 'bg-zinc-50 text-zinc-900 border-zinc-300'
+                    }`}
+                  >
+                    {unitSize === 2 && (
+                      <>
+                        <option value="uint16">UInt16 (부호없는 정수, 0~65535)</option>
+                        <option value="int16">Int16 (부호있는 정수, -32768~32767)</option>
+                        <option value="hex">HEX (16진수, 0x0000)</option>
+                        <option value="binary">Binary (2진수 비트)</option>
+                      </>
+                    )}
+                    {unitSize === 4 && (
+                      <>
+                        <option value="float32">Float32 (IEEE 754 32비트 실수)</option>
+                        <option value="uint32">UInt32 (32비트 정수)</option>
+                        <option value="int32">Int32 (32비트 부호 정수)</option>
+                        <option value="hex">HEX (32비트 16진수)</option>
+                      </>
+                    )}
+                    {unitSize === 8 && (
+                      <>
+                        <option value="float64">Double (IEEE 754 64비트 실수)</option>
+                        <option value="uint64">UInt64 (64비트 정수)</option>
+                        <option value="int64">Int64 (64비트 부호 정수)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* 3. Byte Order / Endianness Selector */}
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-zinc-500 dark:text-zinc-400 select-none">순서 (Endian):</span>
+                  <select
+                    value={byteOrder}
+                    onChange={(e) => setByteOrder(e.target.value)}
+                    className={`h-7 px-2 font-mono text-xs rounded border outline-none font-bold cursor-pointer ${
+                      isRetro
+                        ? 'bg-white text-black border-[#808080]'
+                        : isDark
+                        ? 'bg-zinc-800 text-zinc-100 border-zinc-700'
+                        : 'bg-zinc-50 text-zinc-900 border-zinc-300'
+                    }`}
+                  >
+                    {unitSize === 2 && (
+                      <>
+                        <option value="AB">AB (Big-Endian 표준)</option>
+                        <option value="BA">BA (Little-Endian / Byte Swap)</option>
+                      </>
+                    )}
+                    {unitSize === 4 && (
+                      <>
+                        <option value="ABCD">ABCD (Big-Endian 표준)</option>
+                        <option value="CDAB">CDAB (Word-Swap / Modicon)</option>
+                        <option value="BADC">BADC (Byte-Swap)</option>
+                        <option value="DCBA">DCBA (Little-Endian)</option>
+                      </>
+                    )}
+                    {unitSize === 8 && (
+                      <>
+                        <option value="ABCDEFGH">ABCDEFGH (Big-Endian 표준)</option>
+                        <option value="GHEFCDAB">GHEFCDAB (Word-Swap)</option>
+                        <option value="HGFEDCBA">HGFEDCBA (Little-Endian)</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* Batch Copy Registers Button */}
+                <button
+                  onClick={handleCopyAllRegisters}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+                    copiedRegs
+                      ? 'bg-emerald-600 text-white'
+                      : isRetro
+                      ? 'bg-[#d4d0c8] border border-[#808080] text-black hover:bg-white'
+                      : isDark
+                      ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700'
+                      : 'bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-300'
+                  }`}
+                  title="전체 디코딩 레지스터 표를 TSV 텍스트로 복사"
+                >
+                  {copiedRegs ? <Check size={13} /> : <Copy size={13} />}
+                  <span>{copiedRegs ? '전체 복사됨!' : '디코딩 표 복사'}</span>
+                </button>
+              </div>
+
+              {/* Decoded Registers Grid / Table */}
+              <div
+                className={`max-h-60 overflow-y-auto rounded border font-mono text-xs ${
+                  isRetro
+                    ? 'bg-white border-[#808080]'
+                    : isDark
+                    ? 'bg-zinc-950 border-zinc-800'
+                    : 'bg-white border-zinc-200'
+                }`}
+              >
+                <table className="w-full text-left border-collapse">
+                  <thead className="sticky top-0 z-10 select-none">
+                    <tr
+                      className={`border-b text-[11px] font-bold ${
+                        isRetro
+                          ? 'bg-[#ece9d8] text-black border-[#808080]'
+                          : isDark
+                          ? 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                          : 'bg-zinc-100 text-zinc-600 border-zinc-200'
+                      }`}
+                    >
+                      <th className="py-1.5 px-3 w-12 text-center">No</th>
+                      <th className="py-1.5 px-3 w-36">레지스터 번호</th>
+                      <th className="py-1.5 px-3 w-28">바이트 오프셋</th>
+                      <th className="py-1.5 px-3 w-36">HEX</th>
+                      <th className="py-1.5 px-3">변환 값 ({dataType.toUpperCase()})</th>
+                      <th className="py-1.5 px-3 w-16 text-center">복사</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800/60">
+                    {decodedRegisters.map((row) => (
+                      <tr
+                        key={row.index}
+                        className={`transition-colors ${
+                          isDark ? 'hover:bg-zinc-900/60 text-zinc-300' : 'hover:bg-zinc-50 text-zinc-700'
+                        }`}
+                      >
+                        <td className="py-1.5 px-3 text-center text-zinc-400">{row.index + 1}</td>
+                        <td className="py-1.5 px-3 font-bold text-indigo-500 dark:text-indigo-400">
+                          {row.registerRangeLabel}
+                        </td>
+                        <td className="py-1.5 px-3 text-amber-500 dark:text-amber-400">{row.byteOffsetLabel}</td>
+                        <td className="py-1.5 px-3 font-semibold text-zinc-500 dark:text-zinc-400">{row.hex}</td>
+                        <td className="py-1.5 px-3 font-bold text-emerald-600 dark:text-emerald-400 text-[13px]">
+                          {row.formattedValue}
+                        </td>
+                        <td className="py-1.5 px-3 text-center">
+                          <button
+                            onClick={() => handleCopySingleRegister(row.formattedValue, row.index)}
+                            className="p-1 rounded hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+                            title="값 복사"
+                          >
+                            {copiedRegIndex === row.index ? (
+                              <Check size={12} className="text-emerald-500" />
+                            ) : (
+                              <Copy size={12} className="text-zinc-400 hover:text-zinc-200" />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
@@ -426,7 +764,7 @@ export const PacketInspectorModal: React.FC<PacketInspectorModalProps> = ({
 
         {/* Modal Footer */}
         <div
-          className={`flex items-center justify-between px-4 py-3 border-t select-none flex-wrap gap-2 ${
+          className={`flex items-center justify-between px-4 py-3 border-t select-none flex-wrap gap-2 shrink-0 ${
             isRetro
               ? 'bg-[#ece9d8] border-[#808080]'
               : isDark

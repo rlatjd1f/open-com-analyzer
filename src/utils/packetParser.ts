@@ -24,6 +24,7 @@ export interface ParsedPacketResult {
   fields: PacketField[];
   isValidCrc?: boolean;
   notes?: string[];
+  registerPayload?: number[];
 }
 
 const MODBUS_FUNCTION_NAMES: Record<number, string> = {
@@ -251,7 +252,8 @@ export function parseModbusTcp(bytes: number[]): ParsedPacketResult | null {
       slaveOrUnitId: unitId,
       functionCode: rawFc,
       functionName,
-      fields
+      fields,
+      registerPayload: dataBytes
     };
   } else if ([5, 6, 15, 16].includes(rawFc) && bytes.length === 12) {
     messageType = 'response';
@@ -358,6 +360,7 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
   let messageType: 'request' | 'response' | 'exception' = 'request';
   let functionCode = rawFc;
   let functionName = MODBUS_FUNCTION_NAMES[rawFc] || `Function Code ${rawFc}`;
+  let responseRegisterPayload: number[] | undefined;
 
   if (rawFc >= 0x80) {
     messageType = 'exception';
@@ -427,6 +430,7 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
       messageType = 'response';
       const byteCount = bytes[2];
       const dataBytes = bytes.slice(3, -2);
+      responseRegisterPayload = dataBytes;
 
       fields.push({
         name: '응답 바이트 수 (Byte Count)',
@@ -474,7 +478,8 @@ export function parseModbusRtu(bytes: number[]): ParsedPacketResult | null {
     functionCode,
     functionName,
     isValidCrc,
-    fields
+    fields,
+    registerPayload: responseRegisterPayload
   };
 }
 
@@ -562,3 +567,311 @@ export function analyzePacket(bytes: number[]): ParsedPacketResult {
   // 3. Fallback to Generic Frame
   return parseCustomOrRawFrame(bytes);
 }
+
+// -------------------------------------------------------------
+// Modbus Register Payload Analysis & Type Heuristics
+// -------------------------------------------------------------
+
+export interface DecodedRegisterRow {
+  index: number;
+  registerRangeLabel: string;
+  byteOffsetLabel: string;
+  hex: string;
+  formattedValue: string;
+  rawValue: number | bigint | string;
+  binaryStr?: string;
+}
+
+export interface HeuristicTypeGuess {
+  unitSize: 2 | 4 | 8;
+  dataType: 'float32' | 'uint32' | 'int32' | 'uint16' | 'int16' | 'float64';
+  byteOrder: string;
+  confidence: 'high' | 'medium' | 'default';
+  label: string;
+  description: string;
+}
+
+/**
+ * Heuristic auto-detector for Modbus register byte arrays.
+ * Differentiates 2-byte, 4-byte (Float32 / Int32), 8-byte (Double / Int64).
+ */
+export function guessModbusDataType(bytes: number[]): HeuristicTypeGuess {
+  if (!bytes || bytes.length < 2) {
+    return {
+      unitSize: 2,
+      dataType: 'uint16',
+      byteOrder: 'AB',
+      confidence: 'default',
+      label: '2바이트 UInt16',
+      description: '기본 16비트 레지스터'
+    };
+  }
+
+  // 1. Check 4-byte Float32 (ABCD: Big-Endian, CDAB: Word-Swap)
+  if (bytes.length >= 4 && bytes.length % 4 === 0) {
+    const totalChunks = bytes.length / 4;
+
+    // Test ABCD
+    let validFloatAbcd = 0;
+    for (let i = 0; i < bytes.length; i += 4) {
+      const b0 = bytes[i];
+      const b1 = bytes[i + 1];
+      const b2 = bytes[i + 2];
+      const b3 = bytes[i + 3];
+
+      if (b0 === 0 && b1 === 0 && b2 === 0 && b3 === 0) {
+        validFloatAbcd++;
+        continue;
+      }
+
+      const exp = ((b0 & 0x7F) << 1) | ((b1 & 0x80) >> 7);
+      if (exp >= 80 && exp <= 165) {
+        const view = new DataView(new ArrayBuffer(4));
+        view.setUint8(0, b0);
+        view.setUint8(1, b1);
+        view.setUint8(2, b2);
+        view.setUint8(3, b3);
+        const val = view.getFloat32(0, false);
+        if (!isNaN(val) && isFinite(val) && Math.abs(val) < 1e12) {
+          validFloatAbcd++;
+        }
+      }
+    }
+
+    if (validFloatAbcd / totalChunks >= 0.7) {
+      return {
+        unitSize: 4,
+        dataType: 'float32',
+        byteOrder: 'ABCD',
+        confidence: 'high',
+        label: '4바이트 Float32 (IEEE 754 Big-Endian)',
+        description: `연속된 ${totalChunks}개 레지스터 쌍 중 ${validFloatAbcd}개가 정상 부동소수점 실수(Float) 패턴과 일치합니다.`
+      };
+    }
+
+    // Test CDAB (Word-Swap Float32)
+    let validFloatCdab = 0;
+    for (let i = 0; i < bytes.length; i += 4) {
+      const b0 = bytes[i + 2];
+      const b1 = bytes[i + 3];
+      const b2 = bytes[i];
+      const b3 = bytes[i + 1];
+
+      if (b0 === 0 && b1 === 0 && b2 === 0 && b3 === 0) {
+        validFloatCdab++;
+        continue;
+      }
+
+      const exp = ((b0 & 0x7F) << 1) | ((b1 & 0x80) >> 7);
+      if (exp >= 80 && exp <= 165) {
+        const view = new DataView(new ArrayBuffer(4));
+        view.setUint8(0, b0);
+        view.setUint8(1, b1);
+        view.setUint8(2, b2);
+        view.setUint8(3, b3);
+        const val = view.getFloat32(0, false);
+        if (!isNaN(val) && isFinite(val) && Math.abs(val) < 1e12) {
+          validFloatCdab++;
+        }
+      }
+    }
+
+    if (validFloatCdab / totalChunks >= 0.7) {
+      return {
+        unitSize: 4,
+        dataType: 'float32',
+        byteOrder: 'CDAB',
+        confidence: 'high',
+        label: '4바이트 Float32 (Word-Swap CDAB)',
+        description: `연속된 ${totalChunks}개 레지스터 쌍 중 ${validFloatCdab}개가 워드 스왑 부동소수점 실수(Float) 패턴과 일치합니다.`
+      };
+    }
+
+    // Test Int32 padding pattern (e.g. 00 00 XX XX)
+    let int32PadCount = 0;
+    for (let i = 0; i < bytes.length; i += 4) {
+      if (bytes[i] === 0 && bytes[i + 1] === 0 && (bytes[i + 2] !== 0 || bytes[i + 3] !== 0)) {
+        int32PadCount++;
+      }
+    }
+    if (int32PadCount / totalChunks >= 0.6) {
+      return {
+        unitSize: 4,
+        dataType: 'uint32',
+        byteOrder: 'ABCD',
+        confidence: 'medium',
+        label: '4바이트 UInt32 (Big-Endian)',
+        description: `연속된 4바이트 정수 상위 패딩(0x0000) 패턴이 감지되었습니다.`
+      };
+    }
+  }
+
+  // 2. Check 8-byte Double / Float64
+  if (bytes.length >= 8 && bytes.length % 8 === 0) {
+    const totalDoubleChunks = bytes.length / 8;
+    let validDoubleCount = 0;
+    for (let i = 0; i < bytes.length; i += 8) {
+      const b0 = bytes[i];
+      const b1 = bytes[i + 1];
+      const exp = ((b0 & 0x7F) << 4) | ((b1 & 0xF0) >> 4);
+      if (exp >= 900 && exp <= 1100) {
+        validDoubleCount++;
+      }
+    }
+    if (validDoubleCount / totalDoubleChunks >= 0.7) {
+      return {
+        unitSize: 8,
+        dataType: 'float64',
+        byteOrder: 'ABCDEFGH',
+        confidence: 'medium',
+        label: '8바이트 Double (Float64)',
+        description: `8바이트 64비트 배정밀도 부동소수점 패턴이 감지되었습니다.`
+      };
+    }
+  }
+
+  // Default: 2-byte UInt16
+  return {
+    unitSize: 2,
+    dataType: 'uint16',
+    byteOrder: 'AB',
+    confidence: 'default',
+    label: '2바이트 UInt16 (표준 Modbus 1워드)',
+    description: '16비트 단일 레지스터 기본 단위'
+  };
+}
+
+/**
+ * Decode register payload bytes into structured rows according to chosen unit size, data type, and byte order.
+ */
+export function decodeRegisterPayload(
+  bytes: number[],
+  unitSize: 2 | 4 | 8,
+  dataType: string,
+  byteOrder: string,
+  startRegisterOffset: number = 0
+): DecodedRegisterRow[] {
+  if (!bytes || bytes.length === 0) return [];
+
+  const rows: DecodedRegisterRow[] = [];
+  const chunkSize = unitSize;
+  const wordCount = unitSize / 2;
+
+  for (let offset = 0; offset + chunkSize <= bytes.length; offset += chunkSize) {
+    const rawChunk = bytes.slice(offset, offset + chunkSize);
+    const itemIndex = Math.floor(offset / chunkSize);
+    const regStart = startRegisterOffset + itemIndex * wordCount;
+    const regEnd = regStart + wordCount - 1;
+
+    const regLabel = wordCount === 1 ? `Reg #${regStart}` : `Reg #${regStart}..#${regEnd} (${wordCount}W)`;
+    const byteOffsetLabel = `+${offset}B..+${offset + chunkSize - 1}B`;
+    const hexStr = rawChunk.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+
+    // Reorder bytes according to byteOrder
+    let ordered: number[] = [];
+    if (unitSize === 2) {
+      if (byteOrder === 'BA') {
+        ordered = [rawChunk[1], rawChunk[0]];
+      } else {
+        ordered = [rawChunk[0], rawChunk[1]]; // 'AB'
+      }
+    } else if (unitSize === 4) {
+      if (byteOrder === 'CDAB') {
+        ordered = [rawChunk[2], rawChunk[3], rawChunk[0], rawChunk[1]];
+      } else if (byteOrder === 'BADC') {
+        ordered = [rawChunk[1], rawChunk[0], rawChunk[3], rawChunk[2]];
+      } else if (byteOrder === 'DCBA') {
+        ordered = [rawChunk[3], rawChunk[2], rawChunk[1], rawChunk[0]];
+      } else {
+        ordered = [rawChunk[0], rawChunk[1], rawChunk[2], rawChunk[3]]; // 'ABCD'
+      }
+    } else if (unitSize === 8) {
+      if (byteOrder === 'GHEFCDAB') {
+        ordered = [rawChunk[6], rawChunk[7], rawChunk[4], rawChunk[5], rawChunk[2], rawChunk[3], rawChunk[0], rawChunk[1]];
+      } else if (byteOrder === 'HGFEDCBA') {
+        ordered = [...rawChunk].reverse();
+      } else {
+        ordered = [...rawChunk]; // 'ABCDEFGH'
+      }
+    }
+
+    // Convert ordered bytes to value
+    let formattedValue = '';
+    let rawValue: number | bigint | string = 0;
+    const buf = new ArrayBuffer(unitSize);
+    const view = new DataView(buf);
+    ordered.forEach((b, i) => view.setUint8(i, b));
+
+    if (unitSize === 2) {
+      if (dataType === 'int16') {
+        const val = view.getInt16(0, false);
+        rawValue = val;
+        formattedValue = String(val);
+      } else if (dataType === 'hex') {
+        const val = view.getUint16(0, false);
+        rawValue = `0x${val.toString(16).toUpperCase().padStart(4, '0')}`;
+        formattedValue = rawValue;
+      } else if (dataType === 'binary') {
+        const val = view.getUint16(0, false);
+        rawValue = val.toString(2).padStart(16, '0');
+        formattedValue = `${rawValue.slice(0, 8)} ${rawValue.slice(8)}`;
+      } else {
+        // uint16 default
+        const val = view.getUint16(0, false);
+        rawValue = val;
+        formattedValue = String(val);
+      }
+    } else if (unitSize === 4) {
+      if (dataType === 'float32') {
+        const val = view.getFloat32(0, false);
+        rawValue = val;
+        // Format float cleanly
+        if (Number.isInteger(val)) {
+          formattedValue = val.toFixed(1);
+        } else {
+          formattedValue = parseFloat(val.toPrecision(7)).toString();
+        }
+      } else if (dataType === 'int32') {
+        const val = view.getInt32(0, false);
+        rawValue = val;
+        formattedValue = val.toLocaleString();
+      } else if (dataType === 'hex') {
+        const val = view.getUint32(0, false);
+        rawValue = `0x${val.toString(16).toUpperCase().padStart(8, '0')}`;
+        formattedValue = rawValue;
+      } else {
+        // uint32 default
+        const val = view.getUint32(0, false);
+        rawValue = val;
+        formattedValue = val.toLocaleString();
+      }
+    } else if (unitSize === 8) {
+      if (dataType === 'float64') {
+        const val = view.getFloat64(0, false);
+        rawValue = val;
+        formattedValue = parseFloat(val.toPrecision(10)).toString();
+      } else if (dataType === 'int64') {
+        const val = view.getBigInt64(0, false);
+        rawValue = val;
+        formattedValue = val.toString();
+      } else {
+        // uint64 default
+        const val = view.getBigUint64(0, false);
+        rawValue = val;
+        formattedValue = val.toString();
+      }
+    }
+
+    rows.push({
+      index: itemIndex,
+      registerRangeLabel: regLabel,
+      byteOffsetLabel,
+      hex: hexStr,
+      formattedValue,
+      rawValue
+    });
+  }
+
+  return rows;
+}
+
